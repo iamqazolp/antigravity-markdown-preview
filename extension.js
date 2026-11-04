@@ -251,7 +251,7 @@ function postprocessAlertsInHtml(html, fenceMetaByLine) {
 
   // Convert any [label](file://...) or [label](conversation://...) rejected by markdown-it's default validateLink
   out = out.replace(
-    /(<pre\b[\s\S]*?<\/pre>)|\[(<code\b[^>]*>[^<]*<\/code>|[^\[\]\n<]+)\]\((?:<a\b[^>]*href=["']((?:file|conversation):\/\/[^"']+)["'][^>]*>[\s\S]*?<\/a>|((?:file|conversation):\/\/[^)\s<"']+))\)/gi,
+    /(<pre\b[\s\S]*?<\/pre>)|\[((?:<code\b[^>]*>[\s\S]*?<\/code>|<\/?(?:strong|b|em|i|span)\b[^>]*>|[^\[\]\n<])+)\]\((?:<a\b[^>]*href=["']((?:file|conversation):\/\/[^"']+)["'][^>]*>[\s\S]*?<\/a>|((?:file|conversation):\/\/[^)\s<"']+))\)/gi,
     (full, preBlock, labelHtml, linkedHref, rawHref) => {
       if (preBlock) return preBlock;
       const href = (linkedHref || rawHref || "").trim();

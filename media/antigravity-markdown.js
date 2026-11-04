@@ -1591,7 +1591,7 @@
   function decorateLinks(root) {
     // Repair any unparsed [label](file://...) or [label](conversation://...) in DOM blocks
     const UNPARSED_LINK_RE =
-      /\[(<code\b[^>]*>[^<]*<\/code>|[^\[\]\n<]+)\]\((?:<a\b[^>]*href=["']((?:file|conversation):\/\/[^"']+)["'][^>]*>[\s\S]*?<\/a>|((?:file|conversation):\/\/[^)\s<"']+))\)/gi;
+      /\[((?:<code\b[^>]*>[\s\S]*?<\/code>|<\/?(?:strong|b|em|i|span)\b[^>]*>|[^\[\]\n<])+)\]\((?:<a\b[^>]*href=["']((?:file|conversation):\/\/[^"']+)["'][^>]*>[\s\S]*?<\/a>|((?:file|conversation):\/\/[^)\s<"']+))\)/gi;
     root
       .querySelectorAll(
         "p:not([data-agy-links-checked='1']), li:not([data-agy-links-checked='1']), td:not([data-agy-links-checked='1']), th:not([data-agy-links-checked='1'])"

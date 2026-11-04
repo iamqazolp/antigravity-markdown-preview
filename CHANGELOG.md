@@ -6,6 +6,7 @@ All notable changes to the **Antigravity Markdown Review** (`agy-markdown-review
 
 ### Fixed
 - Use direct `raw.githubusercontent.com` image URLs (`--baseImagesUrl`) and standard Markdown image syntax in `README.md` so all screenshots and animated GIFs render immediately on the VS Code Marketplace and Open VSX pages.
+- Fix `file://` and `conversation://` link parsing when link labels contain mixed inline formatting (`<strong>`, `<em>`, `<code>`, `<span>`).
 
 ## [1.0.0] - 2026-11-05
 
