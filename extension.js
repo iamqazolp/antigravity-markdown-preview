@@ -1702,6 +1702,23 @@ function rewriteLocalImageUris(html, webview, baseDir, fallbackDir) {
       const cleanSuffix = suffix.replace(/\s*\bdecoding=["'][^"']*["']/gi, "");
       const syncPrefix = cleanPrefix.replace(/^<img\b/i, '<img decoding="sync"');
       if (/^(?:https?:|data:|vscode-webview-resource:)/i.test(src)) {
+        const ghRawPrefix =
+          "https://raw.githubusercontent.com/iamqazolp/antigravity-markdown-preview/main/";
+        if (src.startsWith(ghRawPrefix)) {
+          const relCandidate = src.slice(ghRawPrefix.length);
+          const localCandidate = resolveLocalAssetPath(relCandidate, baseDir, fallbackDir);
+          if (localCandidate && fs.existsSync(localCandidate)) {
+            const dims = getImageDimensions(localCandidate);
+            const hasDims = /\b(?:width|height)=["']/i.test(full);
+            const dimAttrs =
+              dims && !hasDims ? ` width="${dims.width}" height="${dims.height}"` : "";
+            const withDimsPrefix = dimAttrs
+              ? syncPrefix.replace(/^<img\b/i, `<img${dimAttrs}`)
+              : syncPrefix;
+            const webviewUri = webview.asWebviewUri(vscode.Uri.file(localCandidate));
+            return `${withDimsPrefix}${webviewUri}${cleanSuffix}`;
+          }
+        }
         return `${syncPrefix}${src}${cleanSuffix}`;
       }
       const fsPath = resolveLocalAssetPath(src, baseDir, fallbackDir);

@@ -2,7 +2,7 @@
 
 **Google Antigravity's native Artifact Viewer styling, theme-adaptive syntax highlighting, interactive carousels, and 60fps bidirectional scroll sync for VS Code, Cursor, Windsurf, and Antigravity IDE.**
 
-![Antigravity Markdown Review Showcase](media/screenshots/demo-showcase.gif)
+![Antigravity Markdown Review Showcase](https://raw.githubusercontent.com/iamqazolp/antigravity-markdown-preview/main/media/screenshots/demo-showcase.gif)
 
 ---
 
@@ -18,7 +18,7 @@
 
 ## 🎨 Full Syntax & Line Code Highlighting
 
-![Syntax Highlighting & Theme Synergy](media/screenshots/syntax-highlighting.png)
+![Syntax Highlighting & Theme Synergy](https://raw.githubusercontent.com/iamqazolp/antigravity-markdown-preview/main/media/screenshots/syntax-highlighting.png)
 
 - **Active Theme Synergy & Live Syntax Palette**: Code cells, table headers, inline code pills, and callout alerts dynamically blend with your active VS Code theme's workbench surfaces (`notebook.cellEditorBackground`, `sideBar.background`) and automatically extract `semanticTokenColors` & `tokenColors` from your active editor theme (`agyMarkdown.useThemePalette`).
 - **Okaidia Dark & Crisp Light Palettes**: Comprehensive `.hljs-*` (Highlight.js) and `.token.*` (Prism.js) token rules for Dark Mode, Light Mode, and PDF/Print export, including recursive highlighting for nested code fences inside ```` ```markdown ```` blocks.
@@ -46,7 +46,7 @@ class FlashAttentionBlock(nn.Module):
 
 ## 🧩 Antigravity Artifact Components
 
-![Callout Alerts, Interactive Carousels & Diagrams](media/screenshots/callouts-carousels.png)
+![Callout Alerts, Interactive Carousels & Diagrams](https://raw.githubusercontent.com/iamqazolp/antigravity-markdown-preview/main/media/screenshots/callouts-carousels.png)
 
 - **GitHub-Style Callout Alerts**: Native rendering and SVG icons for `[!NOTE]`, `[!TIP]`, `[!IMPORTANT]`, `[!WARNING]`, and `[!CAUTION]`.
 - **Interactive Carousels**: Multi-slide `` ````carousel `` blocks separated by `<!-- slide -->` HTML comments with keyboard and button navigation, nesting support for code blocks, tables, alerts, and images.
@@ -57,7 +57,7 @@ class FlashAttentionBlock(nn.Module):
 
 ## ⇅ Split Edit & Smooth Bidirectional Scroll Sync
 
-![Split Edit & Smooth 60fps Bidirectional Scroll Sync](media/screenshots/split-edit-sync.gif)
+![Split Edit & Smooth 60fps Bidirectional Scroll Sync](https://raw.githubusercontent.com/iamqazolp/antigravity-markdown-preview/main/media/screenshots/split-edit-sync.gif)
 
 - **1-Click Split Edit**: Click **Split Edit** in the top review toolbar to open or close the raw Markdown editor beside the preview at the exact line you are reading.
 - **Smooth Bidirectional Scroll Sync (Raw ↔ Preview)**:

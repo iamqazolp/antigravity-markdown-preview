@@ -12,8 +12,6 @@ from pathlib import Path
 
 
 EXT_ID = "iamqazolp.agy-markdown-review"
-EXT_VERSION = "1.0.0"
-EXT_DIR_NAME = f"{EXT_ID}-{EXT_VERSION}"
 COPY_ITEMS = ("extension.js", "package.json", "media", "README.md", "CHANGELOG.md", "LICENSE")
 
 
@@ -21,6 +19,10 @@ def install_extension(repo_root: Path) -> list[Path]:
     """Install the extension into `~/.vscode/extensions/` (and Antigravity/Cursor if present)
     and sync Markdown Preview Enhanced (`~/.local/state/crossnote/style.less`).
     """
+    pkg = json.loads((repo_root / "package.json").read_text(encoding="utf-8"))
+    ext_version = str(pkg.get("version", "1.0.2"))
+    ext_dir_name = f"{EXT_ID}-{ext_version}"
+
     home = Path.home()
     ext_roots = [
         home / ".vscode" / "extensions",
@@ -33,9 +35,10 @@ def install_extension(repo_root: Path) -> list[Path]:
         if idx > 0 and not root.exists():
             continue
         root.mkdir(parents=True, exist_ok=True)
-        target = root / EXT_DIR_NAME
-        if target.exists():
-            shutil.rmtree(target)
+        for old_dir in root.glob(f"{EXT_ID}-*"):
+            if old_dir.is_dir():
+                shutil.rmtree(old_dir)
+        target = root / ext_dir_name
         target.mkdir(parents=True, exist_ok=True)
 
         for item_name in COPY_ITEMS:
@@ -72,7 +75,7 @@ def install_extension(repo_root: Path) -> list[Path]:
         entries.append(
             {
                 "identifier": {"id": EXT_ID},
-                "version": EXT_VERSION,
+                "version": ext_version,
                 "location": {
                     "$mid": 1,
                     "fsPath": str(target),
@@ -80,7 +83,7 @@ def install_extension(repo_root: Path) -> list[Path]:
                     "path": target_posix,
                     "scheme": "file",
                 },
-                "relativeLocation": EXT_DIR_NAME,
+                "relativeLocation": ext_dir_name,
                 "metadata": {
                     "installedTimestamp": int(time.time() * 1000),
                     "pinned": False,

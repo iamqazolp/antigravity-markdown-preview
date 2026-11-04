@@ -2,7 +2,7 @@
   "name": "agy-markdown-review",
   "displayName": "Antigravity Markdown Review",
   "description": "Applies Google Antigravity's Artifact Viewer style (callouts, tables, code blocks, carousels, and file links) to every Markdown review and preview in VS Code.",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "publisher": "iamqazolp",
   "license": "MIT",
   "icon": "media/icon.png",
