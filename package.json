@@ -120,6 +120,11 @@
           "default": true,
           "description": "Synchronize scrolling between the raw Markdown editor and Antigravity Markdown Review in split edit mode."
         },
+        "agyMarkdown.codeLineNumbers": {
+          "type": "boolean",
+          "default": false,
+          "description": "Display line numbers inside fenced code blocks by default (can also be enabled per block with `showLineNumbers` in the fence info)."
+        },
         "agyMarkdown.syncMarkdownPreviewEnhanced": {
           "type": "boolean",
           "default": true,

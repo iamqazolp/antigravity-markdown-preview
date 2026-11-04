@@ -134,6 +134,26 @@ function recordEditorPosition(editor) {
   lastEditorLineByPath.set(info.realPath, line);
 }
 
+function preprocessMarkdownCodeFences(mdText) {
+  const fenceMetaByLine = new Map();
+  const src = String(mdText || "");
+  const normalized = src.replace(
+    /^([ \t]*(`{3,}|~{3,}))([^\n]*)\n([\s\S]*?)^\1[ \t]*$/gm,
+    (fullMatch, indentAndFence, _fenceChars, infoStr, body, offset) => {
+      const trimmedInfo = (infoStr || "").trim();
+      if (/^(?:carousel|mermaid)\b/i.test(trimmedInfo)) {
+        return fullMatch;
+      }
+      const startLine = src.slice(0, offset).split("\n").length - 1;
+      const parsed = parseCodeFenceInfo(trimmedInfo, body);
+      fenceMetaByLine.set(startLine, parsed);
+      const canonInfo = parsed.highlightLang ? parsed.highlightLang : trimmedInfo;
+      return `${indentAndFence}${canonInfo}\n${body}${indentAndFence}`;
+    }
+  );
+  return { normalized, fenceMetaByLine };
+}
+
 async function renderMarkdownWithCarousels(markdownText, renderFn) {
   const srcText = String(markdownText || "");
   const totalLines = srcText.split(/\r?\n/).length;
@@ -156,15 +176,17 @@ async function renderMarkdownWithCarousels(markdownText, renderFn) {
     }
   );
 
-  let mainHtml = await renderFn(withPlaceholders);
-  mainHtml = postprocessAlertsInHtml(mainHtml);
+  const mainPre = preprocessMarkdownCodeFences(withPlaceholders);
+  let mainHtml = await renderFn(mainPre.normalized);
+  mainHtml = postprocessAlertsInHtml(mainHtml, mainPre.fenceMetaByLine);
 
   for (let i = 0; i < carousels.length; i++) {
     const { slides, startLine, endLine } = carousels[i];
     const renderedSlides = [];
     for (let sIdx = 0; sIdx < slides.length; sIdx++) {
-      let slideHtml = await renderFn(slides[sIdx]);
-      slideHtml = postprocessAlertsInHtml(slideHtml);
+      const slidePre = preprocessMarkdownCodeFences(slides[sIdx]);
+      let slideHtml = await renderFn(slidePre.normalized);
+      slideHtml = postprocessAlertsInHtml(slideHtml, slidePre.fenceMetaByLine);
       slideHtml = slideHtml
         .replace(/\s*\bdata-line(?:-end)?=["'][^"']*["']/gi, "")
         .replace(/\bcode-line\b\s*/g, "");
@@ -194,7 +216,7 @@ async function renderMarkdownWithCarousels(markdownText, renderFn) {
   return `${mainHtml}\n<div class="code-line agy-scroll-sentinel" data-line="${totalLines}"></div>`;
 }
 
-function postprocessAlertsInHtml(html) {
+function postprocessAlertsInHtml(html, fenceMetaByLine) {
   let out = String(html || "").replace(
     /<blockquote\b([^>]*)>\s*<p\b([^>]*)>\[!(NOTE|TIP|IMPORTANT|WARNING|CAUTION)\](?:\s*<br\s*\/?>|\s*\n|\s+)?([\s\S]*?)<\/blockquote>/gi,
     (_, bqAttrs, pAttrs, rawType, innerRest) => {
@@ -248,7 +270,640 @@ function postprocessAlertsInHtml(html) {
     }
   );
 
+  out = postprocessCodeBlocksInHtml(out, fenceMetaByLine);
   return out;
+}
+
+const LANG_ALIAS_MAP = {
+  py: "python",
+  py3: "python",
+  python3: "python",
+  pyi: "python",
+  pytorch: "python",
+  pyspark: "python",
+  mojo: "python",
+  triton: "python",
+  cython: "python",
+  starlark: "python",
+  bazel: "python",
+  bzl: "python",
+  js: "javascript",
+  mjs: "javascript",
+  cjs: "javascript",
+  jsx: "javascript",
+  javascriptreact: "javascript",
+  ts: "typescript",
+  mts: "typescript",
+  cts: "typescript",
+  tsx: "typescript",
+  typescriptreact: "typescript",
+  sh: "bash",
+  zsh: "bash",
+  fish: "bash",
+  shell: "bash",
+  "shell-session": "bash",
+  shellsession: "bash",
+  console: "bash",
+  terminal: "bash",
+  bashrc: "bash",
+  zshrc: "bash",
+  "c++": "cpp",
+  cc: "cpp",
+  cxx: "cpp",
+  hpp: "cpp",
+  "h++": "cpp",
+  cuda: "cpp",
+  cu: "cpp",
+  ptx: "cpp",
+  hip: "cpp",
+  "c#": "csharp",
+  cs: "csharp",
+  dotnet: "csharp",
+  golang: "go",
+  rs: "rust",
+  zig: "rust",
+  wgsl: "rust",
+  cairo: "rust",
+  kt: "kotlin",
+  kts: "kotlin",
+  rb: "ruby",
+  tf: "ruby",
+  hcl: "ruby",
+  terraform: "ruby",
+  psql: "sql",
+  postgres: "sql",
+  postgresql: "sql",
+  mysql: "sql",
+  mariadb: "sql",
+  sqlite: "sql",
+  sqlite3: "sql",
+  sparksql: "sql",
+  snowflake: "sql",
+  bigquery: "sql",
+  clickhouse: "sql",
+  duckdb: "sql",
+  tsql: "sql",
+  plsql: "sql",
+  jsonc: "json",
+  json5: "json",
+  jsonl: "json",
+  ndjson: "json",
+  geojson: "json",
+  yml: "yaml",
+  toml: "ini",
+  conf: "ini",
+  cfg: "ini",
+  env: "ini",
+  dotenv: "ini",
+  properties: "ini",
+  docker: "dockerfile",
+  containerfile: "dockerfile",
+  html: "xml",
+  html5: "xml",
+  xhtml: "xml",
+  svg: "xml",
+  vue: "xml",
+  svelte: "xml",
+  astro: "xml",
+  hlsl: "glsl",
+  metal: "cpp",
+  solidity: "javascript",
+  sol: "javascript",
+  prisma: "graphql",
+  gql: "graphql",
+  md: "markdown",
+  mdx: "markdown",
+  tex: "latex",
+  katex: "latex",
+  math: "latex",
+  ps1: "powershell",
+  pwsh: "powershell",
+  bat: "dos",
+  cmd: "dos",
+  asm: "x86asm",
+  nasm: "x86asm",
+  gas: "x86asm"
+};
+
+function decodeHtmlEntities(s) {
+  return String(s || "")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#x27;|&#39;|&apos;/g, "'")
+    .replace(/&amp;/g, "&");
+}
+
+function detectUntaggedCodeLang(rawCode) {
+  const s = String(rawCode || "").trim();
+  if (!s) return "";
+  // Skip ASCII art / box-drawing diagrams
+  if (/[┌┐└┘├┤┬┴┼───│═║╔╗╚╝╠╣╦╩╬]/.test(s) && !/├──|└──/.test(s)) {
+    return "";
+  }
+  if (/^(?:diff --git|--- a\/|\+\+\+ b\/|@@ -\d+)/m.test(s)) return "diff";
+  if (/^\s*\{[\s\S]*"[^"]+"\s*:/m.test(s) && /[\]}]\s*$/.test(s)) return "json";
+  if (/^\s*(?:def |class |from [a-zA-Z0-9_.]+ import |import [a-zA-Z0-9_]+|@[a-zA-Z_][\w.]*\s*\n\s*(?:def|class)\b)/m.test(s)) {
+    return "python";
+  }
+  if (/^\s*(?:#include\s+[<"]|__global__\s+void\b|int\s+main\s*\()/m.test(s)) return "cpp";
+  if (/^\s*(?:pub\s+(?:fn|struct|enum|trait)\b|fn\s+\w+\s*\(|impl(?:<[^>]+>)?\s+\w+)/m.test(s)) return "rust";
+  if (/^\s*(?:package\s+\w+|func\s+(?:\([^)]+\)\s*)?\w+\s*\()/m.test(s)) return "go";
+  if (/^\s*(?:interface\s+[A-Z]\w*|type\s+[A-Z]\w*\s*=|export\s+(?:default\s+|async\s+)?(?:function|class|const|interface|type)\b|const\s+\w+\s*=\s*(?:async\s*)?\()/m.test(s)) {
+    return "typescript";
+  }
+  if (/^\s*(?:SELECT\b[\s\S]+\bFROM\b|CREATE\s+TABLE\b|INSERT\s+INTO\b|ALTER\s+TABLE\b)/im.test(s)) {
+    return "sql";
+  }
+  if (/^(?:#!\/bin\/(?:ba|z)?sh|\s*(?:\$\s+)?(?:python3?|pip3?|uv|npm|npx|git|docker|kubectl|cargo|curl|brew|chmod|mkdir|export)\s+\S+)/m.test(s)) {
+    return "bash";
+  }
+  return "";
+}
+
+function parseCodeFenceInfo(rawInfo, rawCode) {
+  const info = String(rawInfo || "").trim();
+  let hlLines = "";
+  let title = "";
+  let showLineNumbers = false;
+
+  let rest = info;
+  // Extract {1,3-5} range
+  const braceMatch = rest.match(/\{([\d\s,-]+)\}/);
+  if (braceMatch) {
+    hlLines = braceMatch[1].replace(/\s+/g, "");
+    rest = rest.replace(braceMatch[0], " ");
+  }
+  // Extract hl_lines="1 3-5"
+  const hlAttrMatch = rest.match(/\bhl_lines=["']([^"']+)["']/i);
+  if (hlAttrMatch) {
+    hlLines = hlAttrMatch[1].trim().replace(/\s+/g, ",");
+    rest = rest.replace(hlAttrMatch[0], " ");
+  }
+  // Extract title="..." or file="..." or filename="..."
+  const titleMatch = rest.match(/\b(?:title|file|filename)=["']([^"']+)["']/i);
+  if (titleMatch) {
+    title = titleMatch[1].trim();
+    rest = rest.replace(titleMatch[0], " ");
+  }
+  if (/\b(?:showLineNumbers|lineNumbers|numberLines|linenos)\b/i.test(rest)) {
+    showLineNumbers = true;
+    rest = rest.replace(/\b(?:showLineNumbers|lineNumbers|numberLines|linenos)\b/gi, " ");
+  }
+
+  const firstToken = (rest.trim().split(/\s+/)[0] || "").toLowerCase();
+  let displayLang = firstToken;
+  if (!displayLang || displayLang === "text" || displayLang === "plaintext") {
+    const detected = !displayLang ? detectUntaggedCodeLang(rawCode) : "";
+    if (detected) {
+      displayLang = detected;
+    }
+  }
+  const highlightLang = LANG_ALIAS_MAP[displayLang] || displayLang;
+  return {
+    displayLang,
+    highlightLang,
+    title,
+    hlLines,
+    showLineNumbers
+  };
+}
+
+function parseLineHighlightSpec(spec) {
+  const set = new Set();
+  if (!spec) return set;
+  for (const part of String(spec).split(/[,\s]+/)) {
+    const trimmed = part.trim();
+    if (!trimmed) continue;
+    const rangeMatch = trimmed.match(/^(\d+)-(\d+)$/);
+    if (rangeMatch) {
+      const a = parseInt(rangeMatch[1], 10);
+      const b = parseInt(rangeMatch[2], 10);
+      for (let i = Math.min(a, b); i <= Math.max(a, b); i++) {
+        set.add(i);
+      }
+    } else {
+      const n = parseInt(trimmed, 10);
+      if (!Number.isNaN(n)) set.add(n);
+    }
+  }
+  return set;
+}
+
+const CONTAINER_SPAN_CLASSES = new Set(["hljs-params", "hljs-function", "hljs-subst"]);
+const SHELL_LANG_SET = new Set(["bash", "sh", "zsh", "fish", "shell", "console", "terminal"]);
+const SHELL_CMD_SET = new Set([
+  "python", "python3", "pip", "pip3", "uv", "poetry", "conda", "pytest", "ruff", "mypy", "black",
+  "node", "npm", "npx", "yarn", "pnpm", "bun", "deno", "tsc", "eslint", "prettier",
+  "git", "gh", "docker", "kubectl", "helm", "terraform", "ansible", "aws", "gcloud", "az",
+  "cargo", "rustc", "rustup", "go", "javac", "java", "mvn", "gradle", "gcc", "g++", "clang", "nvcc", "make", "cmake", "ninja",
+  "curl", "wget", "ssh", "scp", "rsync", "tar", "zip", "unzip", "gzip", "gunzip",
+  "ls", "ll", "la", "cd", "pwd", "mkdir", "rmdir", "rm", "cp", "mv", "touch", "cat", "head", "tail", "less", "more",
+  "grep", "egrep", "fgrep", "rg", "find", "fd", "sed", "awk", "sort", "uniq", "wc", "cut", "tr", "xargs", "tee",
+  "chmod", "chown", "sudo", "su", "env", "export", "source", "which", "whereis", "ps", "top", "htop", "kill", "pkill",
+  "brew", "apt", "apt-get", "yum", "dnf", "pacman", "apk", "systemctl", "journalctl", "service", "agy", "code"
+]);
+
+const FALLBACK_KEYWORDS = new Set([
+  "def", "class", "return", "import", "from", "as", "if", "elif", "else", "for", "while", "try", "except",
+  "finally", "with", "async", "await", "yield", "lambda", "pass", "break", "continue", "raise", "assert",
+  "del", "global", "nonlocal", "in", "is", "not", "and", "or",
+  "const", "let", "var", "function", "interface", "type", "enum", "implements", "extends", "export",
+  "default", "new", "delete", "typeof", "instanceof", "void", "of", "switch", "case", "throw", "catch",
+  "readonly", "public", "private", "protected", "static", "abstract", "override", "declare", "namespace",
+  "struct", "impl", "trait", "pub", "fn", "mut", "ref", "match", "use", "mod", "crate", "where", "unsafe", "extern", "move",
+  "package", "func", "defer", "go", "chan", "select", "fallthrough", "range",
+  "virtual", "inline", "template", "typename", "constexpr", "noexcept", "nullptr", "sizeof", "typedef", "union", "using",
+  "__global__", "__device__", "__host__", "__shared__", "__constant__", "__syncthreads",
+  "SELECT", "FROM", "WHERE", "JOIN", "LEFT", "RIGHT", "INNER", "OUTER", "FULL", "CROSS", "ON", "GROUP", "BY",
+  "ORDER", "HAVING", "LIMIT", "OFFSET", "INSERT", "INTO", "VALUES", "UPDATE", "SET", "DELETE", "CREATE", "ALTER",
+  "DROP", "TABLE", "VIEW", "INDEX", "WITH", "AS", "DISTINCT", "UNION", "ALL", "CASE", "WHEN", "THEN", "END",
+  "AND", "OR", "NOT", "IN", "IS", "NULL", "PRIMARY", "KEY", "FOREIGN", "REFERENCES", "ASC", "DESC", "OVER", "PARTITION"
+]);
+
+const FALLBACK_LITERALS = new Set([
+  "True", "False", "None", "true", "false", "null", "undefined", "NaN", "Infinity", "nil", "NULL"
+]);
+
+const FALLBACK_BUILTINS = new Set([
+  "int", "float", "str", "bool", "list", "dict", "set", "tuple", "bytes", "object", "complex",
+  "len", "range", "print", "enumerate", "zip", "map", "filter", "sorted", "reversed", "sum", "min", "max",
+  "abs", "round", "any", "all", "isinstance", "issubclass", "getattr", "setattr", "hasattr", "open", "super",
+  "number", "string", "boolean", "symbol", "bigint", "never", "unknown", "console", "window", "document", "Math", "JSON", "Promise", "Object", "Array", "Map", "Set",
+  "usize", "isize", "u8", "u16", "u32", "u64", "u128", "i8", "i16", "i32", "i64", "i128", "f16", "bf16", "f32", "f64",
+  "char", "short", "long", "double", "unsigned", "signed", "size_t", "uint8_t", "uint16_t", "uint32_t", "uint64_t", "int8_t", "int16_t", "int32_t", "int64_t",
+  "blockIdx", "blockDim", "threadIdx", "gridDim", "warpSize"
+]);
+
+const SELF_VARS_SET = new Set(["self", "cls", "this", "super"]);
+
+function enrichPlainSegment(escapedText, lang) {
+  const raw = decodeHtmlEntities(escapedText);
+  if (!raw.trim()) return escapedText;
+
+  if (SHELL_LANG_SET.has(lang)) {
+    const re =
+      /(^|[|;&]\s*|\b(?:sudo|time|env|nohup|xargs)\s+)([a-zA-Z0-9_./-]+)|(\b[A-Z_][A-Z0-9_]*)(?==)|(\s)(--?[a-zA-Z0-9][a-zA-Z0-9_-]*)(?=\s|=|$)|(\b\d+(?:\.\d+)?\b)/gm;
+    let out = "";
+    let last = 0;
+    let m;
+    while ((m = re.exec(raw)) !== null) {
+      out += escapeHtml(raw.slice(last, m.index));
+      if (m[2] !== undefined) {
+        out += escapeHtml(m[1]);
+        const cmd = m[2];
+        const base = cmd.split("/").pop();
+        if (SHELL_CMD_SET.has(base) || cmd.startsWith("./")) {
+          out += `<span class="hljs-built_in">${escapeHtml(cmd)}</span>`;
+        } else {
+          out += escapeHtml(cmd);
+        }
+      } else if (m[3] !== undefined) {
+        out += `<span class="hljs-variable constant_">${escapeHtml(m[3])}</span>`;
+      } else if (m[5] !== undefined) {
+        out += escapeHtml(m[4]) + `<span class="hljs-attr">${escapeHtml(m[5])}</span>`;
+      } else if (m[6] !== undefined) {
+        out += `<span class="hljs-number">${escapeHtml(m[6])}</span>`;
+      }
+      last = re.lastIndex;
+    }
+    out += escapeHtml(raw.slice(last));
+    return out;
+  }
+
+  const re =
+    /(\b(?:self|cls|this|super)\b)|(\b(?:__global__|__device__|__host__|__shared__|__constant__|__syncthreads|blockIdx|blockDim|threadIdx|gridDim|warpSize)\b)|(@[a-zA-Z_][\w.]*)|(\.[A-Z][a-zA-Z0-9_]*\b)|(\.[a-zA-Z_][a-zA-Z0-9_]*)(?=\s*\()|(\.[a-zA-Z_][a-zA-Z0-9_]*\b)|(\b[A-Z][a-zA-Z0-9_]*\b)|(\b[a-zA-Z_][a-zA-Z0-9_]*)(?=\s*\()|([,(]\s*)([a-zA-Z_][a-zA-Z0-9_]*)(?=\s*=(?!=))|(\b(?:0x[0-9a-fA-F]+|0b[01]+|\d+(?:\.\d+)?(?:e[+-]?\d+)?)\b)|(->|=>|::|===|!==|==|!=|<=|>=|&&|\|\||<<|>>|\+=|-=|\*=|\/=)/g;
+  let out = "";
+  let last = 0;
+  let m;
+  while ((m = re.exec(raw)) !== null) {
+    out += escapeHtml(raw.slice(last, m.index));
+    if (m[1]) {
+      out += `<span class="hljs-variable language_">${escapeHtml(m[1])}</span>`;
+    } else if (m[2]) {
+      out += `<span class="hljs-keyword">${escapeHtml(m[2])}</span>`;
+    } else if (m[3]) {
+      out += `<span class="hljs-meta">${escapeHtml(m[3])}</span>`;
+    } else if (m[4]) {
+      out += `.<span class="hljs-title class_">${escapeHtml(m[4].slice(1))}</span>`;
+    } else if (m[5]) {
+      out += `.<span class="hljs-title function_">${escapeHtml(m[5].slice(1))}</span>`;
+    } else if (m[6]) {
+      out += `.<span class="hljs-property">${escapeHtml(m[6].slice(1))}</span>`;
+    } else if (m[7]) {
+      const cls = /^[A-Z0-9_]{2,}$/.test(m[7]) ? "hljs-variable constant_" : "hljs-title class_";
+      out += `<span class="${cls}">${escapeHtml(m[7])}</span>`;
+    } else if (m[8]) {
+      out += `<span class="hljs-title function_">${escapeHtml(m[8])}</span>`;
+    } else if (m[9] && m[10]) {
+      out += escapeHtml(m[9]) + `<span class="hljs-attr">${escapeHtml(m[10])}</span>`;
+    } else if (m[11]) {
+      out += `<span class="hljs-number">${escapeHtml(m[11])}</span>`;
+    } else if (m[12]) {
+      out += `<span class="hljs-operator">${escapeHtml(m[12])}</span>`;
+    } else {
+      out += escapeHtml(m[0]);
+    }
+    last = re.lastIndex;
+  }
+  out += escapeHtml(raw.slice(last));
+  return out;
+}
+
+function highlightFallbackPlainCode(rawCode, lang) {
+  const raw = String(rawCode || "");
+  if (lang === "diff") {
+    return raw
+      .split("\n")
+      .map((line) => {
+        if (line.startsWith("@@")) return `<span class="hljs-meta">${escapeHtml(line)}</span>`;
+        if (line.startsWith("+") && !line.startsWith("+++")) {
+          return `<span class="hljs-addition">${escapeHtml(line)}</span>`;
+        }
+        if (line.startsWith("-") && !line.startsWith("---")) {
+          return `<span class="hljs-deletion">${escapeHtml(line)}</span>`;
+        }
+        return escapeHtml(line);
+      })
+      .join("\n");
+  }
+
+  if (/├──|└──|│/.test(raw)) {
+    return raw.replace(
+      /(#.*$)|([a-zA-Z0-9_.-]+\/)|(\b[a-zA-Z0-9_.-]+\.[a-zA-Z0-9]+\b)/gm,
+      (m, cmt, dir, file) => {
+        if (cmt) return `<span class="hljs-comment">${escapeHtml(cmt)}</span>`;
+        if (dir) return `<span class="hljs-title class_">${escapeHtml(dir)}</span>`;
+        if (file) return `<span class="hljs-attr">${escapeHtml(file)}</span>`;
+        return escapeHtml(m);
+      }
+    );
+  }
+
+  if (!lang || lang === "text" || lang === "plaintext") {
+    return escapeHtml(raw);
+  }
+
+  if (SHELL_LANG_SET.has(lang)) {
+    const shRe =
+      /(#[^\n]*)|("(?:\\.|[^"\\\n])*"|'(?:\\.|[^'\\\n])*')|(\$\{?[a-zA-Z_][a-zA-Z0-9_]*\}?)/gm;
+    let out = "";
+    let last = 0;
+    let m;
+    while ((m = shRe.exec(raw)) !== null) {
+      out += enrichPlainSegment(escapeHtml(raw.slice(last, m.index)), lang);
+      if (m[1]) {
+        out += `<span class="hljs-comment">${escapeHtml(m[1])}</span>`;
+      } else if (m[2]) {
+        out += `<span class="hljs-string">${escapeHtml(m[2])}</span>`;
+      } else if (m[3]) {
+        out += `<span class="hljs-variable">${escapeHtml(m[3])}</span>`;
+      }
+      last = shRe.lastIndex;
+    }
+    out += enrichPlainSegment(escapeHtml(raw.slice(last)), lang);
+    return out;
+  }
+
+  const isSql = lang === "sql";
+  const isCLike =
+    lang === "c" || lang === "cpp" || lang === "cuda" || lang === "csharp" || lang === "rust" || lang === "java" || lang === "go" || lang === "javascript" || lang === "typescript";
+
+  const commentPart = isSql
+    ? "(\\/\\*[\\s\\S]*?\\*\\/| --[^\\n]*|^--[^\\n]*)"
+    : isCLike
+    ? "(\\/\\*[\\s\\S]*?\\*\\/|\\/\\/[^\\n]*)"
+    : "(\\/\\*[\\s\\S]*?\\*\\/|\\/\\/[^\\n]*|#(?!!\\[)[^\\n]*)";
+
+  const tokenRe = new RegExp(
+    [
+      commentPart,
+      '("""[\\s\\S]*?"""|\'\'\'[\\s\\S]*?\'\'\'|"(?:\\\\.|[^"\\\\\\n])*"|\'(?:\\\\.|[^\'\\\\\\n])*\'|`(?:\\\\.|[^`\\\\])*`)',
+      "(^[ \\t]*(?:@[a-zA-Z_][\\w.]*|#(?:include|define|pragma|ifdef|ifndef|endif|if|elif|else)\\b[^\\n]*)|#\\[[\\s\\S]*?\\])",
+      '(^[ \\t]*"?[a-zA-Z0-9_.-]+"?(?=\\s*:\\s))',
+      "(\\b(?:0x[0-9a-fA-F]+|0b[01]+|\\d+(?:\\.\\d+)?(?:e[+-]?\\d+)?)\\b)",
+      "(\\b[a-zA-Z_][a-zA-Z0-9_]*\\b)",
+      "(->|=>|::|===|!==|==|!=|<=|>=|&&|\\|\\||<<|>>|\\+=|-=|\\*=|\\/=)"
+    ].join("|"),
+    "gm"
+  );
+
+  let out = "";
+  let last = 0;
+  let m;
+  while ((m = tokenRe.exec(raw)) !== null) {
+    out += escapeHtml(raw.slice(last, m.index));
+    const [full, cmt, str, dec, key, num, ident, op] = m;
+    if (cmt !== undefined) {
+      out += `<span class="hljs-comment">${escapeHtml(cmt)}</span>`;
+    } else if (str !== undefined) {
+      out += `<span class="hljs-string">${escapeHtml(str)}</span>`;
+    } else if (dec !== undefined) {
+      out += `<span class="hljs-meta">${escapeHtml(dec)}</span>`;
+    } else if (
+      key !== undefined &&
+      (lang === "yaml" || lang === "yml" || lang === "json" || lang === "ini" || lang === "toml")
+    ) {
+      out += `<span class="hljs-attr">${escapeHtml(key)}</span>`;
+    } else if (num !== undefined) {
+      out += `<span class="hljs-number">${escapeHtml(num)}</span>`;
+    } else if (ident !== undefined) {
+      const after = raw.slice(tokenRe.lastIndex);
+      const beforeChar = m.index > 0 ? raw[m.index - 1] : "";
+      if (SELF_VARS_SET.has(ident)) {
+        out += `<span class="hljs-variable language_">${escapeHtml(ident)}</span>`;
+      } else if (FALLBACK_LITERALS.has(ident)) {
+        out += `<span class="hljs-literal">${escapeHtml(ident)}</span>`;
+      } else if (
+        FALLBACK_KEYWORDS.has(ident) ||
+        (isSql && FALLBACK_KEYWORDS.has(ident.toUpperCase()))
+      ) {
+        out += `<span class="hljs-keyword">${escapeHtml(ident)}</span>`;
+      } else if (FALLBACK_BUILTINS.has(ident)) {
+        out += `<span class="hljs-built_in">${escapeHtml(ident)}</span>`;
+      } else if (/^\s*\(/.test(after)) {
+        const cls = /^[A-Z]/.test(ident) ? "hljs-title class_" : "hljs-title function_";
+        out += `<span class="${cls}">${escapeHtml(ident)}</span>`;
+      } else if (/^[A-Z][a-zA-Z0-9_]*$/.test(ident)) {
+        const cls = /^[A-Z0-9_]{2,}$/.test(ident) ? "hljs-variable constant_" : "hljs-title class_";
+        out += `<span class="${cls}">${escapeHtml(ident)}</span>`;
+      } else if (beforeChar === ".") {
+        out += `<span class="hljs-property">${escapeHtml(ident)}</span>`;
+      } else {
+        out += escapeHtml(ident);
+      }
+    } else if (op !== undefined) {
+      out += `<span class="hljs-operator">${escapeHtml(op)}</span>`;
+    } else {
+      out += escapeHtml(full);
+    }
+    last = tokenRe.lastIndex;
+  }
+  out += escapeHtml(raw.slice(last));
+  return out;
+}
+
+function splitHtmlIntoBalancedLines(html) {
+  const tokenRe = /(<\/?span\b[^>]*>)|(\r?\n)/gi;
+  const openTags = [];
+  const lines = [];
+  let currentLine = "";
+  let last = 0;
+  let m;
+  while ((m = tokenRe.exec(html)) !== null) {
+    currentLine += html.slice(last, m.index);
+    if (m[1]) {
+      const tag = m[1];
+      if (tag.startsWith("</")) {
+        openTags.pop();
+      } else {
+        openTags.push(tag);
+      }
+      currentLine += tag;
+    } else {
+      for (let i = openTags.length - 1; i >= 0; i--) {
+        currentLine += "</span>";
+      }
+      lines.push(currentLine);
+      currentLine = openTags.join("");
+    }
+    last = tokenRe.lastIndex;
+  }
+  currentLine += html.slice(last);
+  lines.push(currentLine);
+  return lines;
+}
+
+function enrichCodeBlockHtml(innerHtml, rawLang, hlLinesSpec = "", showLineNumbers = false) {
+  const lang = (LANG_ALIAS_MAP[rawLang] || rawLang || "").toLowerCase();
+  let html = String(innerHtml || "");
+
+  const hasSpans = /\bclass=["'][^"']*\b(?:hljs-|token\b)/i.test(html);
+  if (!hasSpans) {
+    const rawText = decodeHtmlEntities(html.replace(/<[^>]+>/g, ""));
+    const effectiveLang = lang || detectUntaggedCodeLang(rawText);
+    html = highlightFallbackPlainCode(rawText, effectiveLang);
+  } else if (
+    lang !== "diff" &&
+    lang !== "markdown" &&
+    lang !== "plaintext" &&
+    lang !== "text" &&
+    lang !== "xml" &&
+    lang !== "json"
+  ) {
+    const tagRe = /<\/?span\b[^>]*>/gi;
+    const stack = [];
+    let out = "";
+    let last = 0;
+    let m;
+    while ((m = tagRe.exec(html)) !== null) {
+      const seg = html.slice(last, m.index);
+      const canEnrich = stack.every((c) => CONTAINER_SPAN_CLASSES.has(c));
+      out += canEnrich ? enrichPlainSegment(seg, lang) : seg;
+      const tag = m[0];
+      if (tag.startsWith("</")) {
+        stack.pop();
+      } else {
+        const clsMatch = tag.match(/\bclass=["']([^"']+)["']/i);
+        stack.push(clsMatch ? clsMatch[1].trim() : "");
+      }
+      out += tag;
+      last = tagRe.lastIndex;
+    }
+    const tail = html.slice(last);
+    const canEnrich = stack.every((c) => CONTAINER_SPAN_CLASSES.has(c));
+    out += canEnrich ? enrichPlainSegment(tail, lang) : tail;
+    html = out;
+  }
+
+  const hlSet = parseLineHighlightSpec(hlLinesSpec);
+  if (hlSet.size > 0 || showLineNumbers) {
+    const trailingNewline = html.endsWith("\n");
+    const trimmedHtml = trailingNewline ? html.slice(0, -1) : html;
+    const lines = splitHtmlIntoBalancedLines(trimmedHtml);
+    html =
+      lines
+        .map((lineHtml, idx) => {
+          const lineNum = idx + 1;
+          const hlClass = hlSet.has(lineNum) ? " agy-code-line-hl" : "";
+          const numAttr = showLineNumbers ? ` data-line-num="${lineNum}"` : "";
+          return `<span class="agy-code-line${hlClass}"${numAttr}>${lineHtml || " "}</span>`;
+        })
+        .join("\n") + (trailingNewline ? "\n" : "");
+  }
+
+  return html;
+}
+
+function postprocessCodeBlocksInHtml(html, fenceMetaByLine) {
+  let defaultLineNums = false;
+  try {
+    defaultLineNums = Boolean(
+      vscode.workspace.getConfiguration("agyMarkdown").get("codeLineNumbers", false)
+    );
+  } catch (_) {}
+
+  return String(html || "").replace(
+    /<pre\b([^>]*)>\s*<code\b([^>]*)>([\s\S]*?)<\/code>\s*<\/pre>/gi,
+    (full, preAttrs, codeAttrs, inner) => {
+      const combined = `${preAttrs || ""} ${codeAttrs || ""}`;
+      if (/\b(?:language-mermaid|lang-mermaid|mermaid)\b/i.test(combined)) {
+        return full;
+      }
+      if (/\bdata-agy-highlighted=["']1["']/i.test(codeAttrs || "")) {
+        return full;
+      }
+      const dlMatch = combined.match(/\bdata-line=["'](\d+)["']/i);
+      const startLine = dlMatch ? parseInt(dlMatch[1], 10) : null;
+      const meta =
+        fenceMetaByLine && startLine !== null && fenceMetaByLine.has(startLine)
+          ? fenceMetaByLine.get(startLine)
+          : null;
+
+      const langMatch =
+        combined.match(/\bdata-lang=["']([^"']+)["']/i) ||
+        combined.match(/\b(?:language-|lang-)([a-zA-Z0-9_+#.-]+)/i);
+      let rawLang =
+        (meta && meta.displayLang) ||
+        (langMatch ? langMatch[1].toLowerCase() : "");
+      if (!rawLang) {
+        const rawText = decodeHtmlEntities(inner.replace(/<[^>]+>/g, ""));
+        rawLang = detectUntaggedCodeLang(rawText);
+      }
+
+      const titleMatch = combined.match(/\bdata-title=["']([^"']+)["']/i);
+      const title = (meta && meta.title) || (titleMatch ? titleMatch[1] : "");
+
+      const hlMatch = combined.match(/\bdata-hl-lines=["']([^"']+)["']/i);
+      const hlLinesSpec =
+        (meta && meta.hlLines) || (hlMatch ? hlMatch[1] : "");
+
+      const lineNumAttr =
+        Boolean(meta && meta.showLineNumbers) ||
+        /\bdata-line-numbers=["']1["']/i.test(combined);
+
+      const enriched = enrichCodeBlockHtml(
+        inner,
+        rawLang,
+        hlLinesSpec,
+        lineNumAttr || defaultLineNums
+      );
+      const extraAttrs =
+        (rawLang && !/\bdata-lang=/i.test(codeAttrs || "")
+          ? ` data-lang="${escapeHtml(rawLang)}"`
+          : "") +
+        (title && !/\bdata-title=/i.test(codeAttrs || "")
+          ? ` data-title="${escapeHtml(title)}"`
+          : "") +
+        (hlLinesSpec && !/\bdata-hl-lines=/i.test(codeAttrs || "")
+          ? ` data-hl-lines="${escapeHtml(hlLinesSpec)}"`
+          : "") +
+        (lineNumAttr && !/\bdata-line-numbers=/i.test(codeAttrs || "")
+          ? ` data-line-numbers="1"`
+          : "");
+      return `<pre${preAttrs}><code${codeAttrs}${extraAttrs} data-agy-highlighted="1">${enriched}</code></pre>`;
+    }
+  );
 }
 
 class AntigravityMarkdownReviewProvider {
@@ -481,7 +1136,7 @@ class AntigravityMarkdownReviewProvider {
       })
     );
 
-    // Keep syncScroll setting in sync if changed in VS Code settings
+    // Keep syncScroll and codeLineNumbers settings in sync if changed in VS Code settings
     disposables.push(
       vscode.workspace.onDidChangeConfiguration((e) => {
         if (e.affectsConfiguration("agyMarkdown.syncScroll")) {
@@ -492,6 +1147,9 @@ class AntigravityMarkdownReviewProvider {
             type: "updateSyncScroll",
             enabled: syncScrollEnabled
           });
+        }
+        if (e.affectsConfiguration("agyMarkdown.codeLineNumbers")) {
+          renderToWebview(true);
         }
       })
     );
@@ -1596,6 +2254,20 @@ function extendMarkdownItWithAntigravity(md) {
     }
   });
 
+  const origHighlight =
+    md.options && typeof md.options.highlight === "function"
+      ? md.options.highlight
+      : null;
+  if (origHighlight) {
+    md.options.highlight = function (str, lang, attrs) {
+      const parsed = parseCodeFenceInfo(
+        `${lang || ""} ${attrs || ""}`.trim(),
+        str
+      );
+      return origHighlight.call(this, str, parsed.highlightLang, attrs);
+    };
+  }
+
   const defaultFence =
     md.renderer.rules.fence ||
     function (tokens, idx, options, env, self) {
@@ -1604,8 +2276,9 @@ function extendMarkdownItWithAntigravity(md) {
 
   md.renderer.rules.fence = function (tokens, idx, options, env, self) {
     const token = tokens[idx];
-    const info = (token.info || "").trim().toLowerCase();
-    if (info === "carousel") {
+    const rawInfo = (token.info || "").trim();
+    const infoLower = rawInfo.toLowerCase();
+    if (infoLower === "carousel") {
       const slides = (token.content || "")
         .split(/<!--\s*slide\s*-->/i)
         .map((s) => s.trim())
@@ -1635,7 +2308,66 @@ function extendMarkdownItWithAntigravity(md) {
         );
       }
     }
-    return defaultFence(tokens, idx, options, env, self);
+
+    if (infoLower === "mermaid") {
+      return defaultFence(tokens, idx, options, env, self);
+    }
+
+    const parsed = parseCodeFenceInfo(rawInfo, token.content || "");
+    if (parsed.displayLang) {
+      token.attrSet("data-lang", parsed.displayLang);
+    }
+    if (parsed.title) {
+      token.attrSet("data-title", parsed.title);
+    }
+    if (parsed.hlLines) {
+      token.attrSet("data-hl-lines", parsed.hlLines);
+    }
+    if (parsed.showLineNumbers) {
+      token.attrSet("data-line-numbers", "1");
+    }
+
+    const savedInfo = token.info;
+    if (parsed.highlightLang) {
+      token.info = parsed.highlightLang;
+    }
+    let rendered = defaultFence(tokens, idx, options, env, self);
+    token.info = savedInfo;
+
+    let defaultLineNums = false;
+    try {
+      defaultLineNums = Boolean(
+        vscode.workspace.getConfiguration("agyMarkdown").get("codeLineNumbers", false)
+      );
+    } catch (_) {}
+
+    rendered = rendered.replace(
+      /<pre\b([^>]*)>\s*<code\b([^>]*)>([\s\S]*?)<\/code>\s*<\/pre>/i,
+      (_, preAttrs, codeAttrs, inner) => {
+        const enriched = enrichCodeBlockHtml(
+          inner,
+          parsed.displayLang,
+          parsed.hlLines,
+          parsed.showLineNumbers || defaultLineNums
+        );
+        const extraAttrs =
+          (parsed.displayLang && !/\bdata-lang=/i.test(codeAttrs)
+            ? ` data-lang="${escapeHtml(parsed.displayLang)}"`
+            : "") +
+          (parsed.title && !/\bdata-title=/i.test(codeAttrs)
+            ? ` data-title="${escapeHtml(parsed.title)}"`
+            : "") +
+          (parsed.hlLines && !/\bdata-hl-lines=/i.test(codeAttrs)
+            ? ` data-hl-lines="${escapeHtml(parsed.hlLines)}"`
+            : "") +
+          (parsed.showLineNumbers && !/\bdata-line-numbers=/i.test(codeAttrs)
+            ? ` data-line-numbers="1"`
+            : "");
+        return `<pre${preAttrs}><code${codeAttrs}${extraAttrs} data-agy-highlighted="1">${enriched}</code></pre>`;
+      }
+    );
+
+    return rendered;
   };
 
   return md;
@@ -1755,6 +2487,13 @@ function activate(context) {
   if (cfg.get("syncMarkdownPreviewEnhanced", true)) {
     syncMarkdownPreviewEnhanced(context.extensionPath);
   }
+
+  try {
+    vscode.commands.executeCommand("markdown.api.reloadPlugins").then(
+      () => {},
+      () => {}
+    );
+  } catch (_) {}
 
   return {
     extendMarkdownIt(md) {

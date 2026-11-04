@@ -16,24 +16,42 @@ body.agy-review-body.vscode-dark,
   --agy-surface: var(--vscode-editorWidget-background, #1f1f23);
   --agy-fg: var(--vscode-editor-foreground, #f4f4f5);
   --agy-heading: var(--vscode-editor-foreground, #fafafa);
-  --agy-muted: #27272a;
+  --agy-muted: color-mix(in srgb, var(--agy-bg) 88%, var(--agy-fg, #f4f4f5) 12%);
   --agy-muted-fg: var(--vscode-descriptionForeground, #a1a1aa);
-  --agy-secondary: #222327;
-  --agy-border: rgba(161, 161, 170, 0.26);
-  --agy-table-border: rgba(161, 161, 170, 0.22);
+  --agy-secondary: color-mix(in srgb, var(--agy-bg) 85%, #000000 15%);
+  --agy-border: color-mix(in srgb, var(--agy-fg, #f4f4f5) 16%, transparent);
+  --agy-table-border: color-mix(in srgb, var(--agy-fg, #f4f4f5) 14%, transparent);
   --agy-table-row-hover: rgba(255, 255, 255, 0.03);
   --agy-link: var(--vscode-textLink-foreground, #6a9fcb);
   --agy-link-hover: var(--vscode-textLink-activeForeground, #8ab8df);
   --agy-code-fg: #e6db74;
-  --agy-code-header-bg: rgba(0, 0, 0, 0.28);
-  --agy-inline-code-border: rgba(255, 255, 255, 0.08);
+  --agy-code-bg: color-mix(in srgb, var(--agy-bg) 78%, #000000 22%);
+  --agy-code-header-bg: color-mix(in srgb, var(--agy-bg) 66%, #000000 34%);
+  --agy-inline-code-border: color-mix(in srgb, var(--agy-fg, #f4f4f5) 10%, transparent);
   --agy-blockquote-bg: rgba(255, 255, 255, 0.025);
-  --agy-toolbar-bg: rgba(24, 24, 27, 0.88);
+  --agy-toolbar-bg: color-mix(in srgb, var(--agy-bg) 88%, transparent);
   --agy-alert-note: #58a6ff;
   --agy-alert-tip: #3fb950;
   --agy-alert-important: #a371f7;
   --agy-alert-warning: #d29922;
   --agy-alert-caution: #f85149;
+  --agy-syn-fg: var(--vscode-editor-foreground, #f8f8f2);
+  --agy-syn-keyword: #ff6188;
+  --agy-syn-type: #66d9ef;
+  --agy-syn-function: #a6e22e;
+  --agy-syn-string: #e6db74;
+  --agy-syn-number: #ae81ff;
+  --agy-syn-param: #fd971f;
+  --agy-syn-attr: #78dce8;
+  --agy-syn-meta: #fd971f;
+  --agy-syn-comment: #8b8878;
+  --agy-syn-punct: #d4d4d8;
+  --agy-syn-add-bg: rgba(63, 185, 80, 0.16);
+  --agy-syn-add-fg: #7ee787;
+  --agy-syn-del-bg: rgba(248, 81, 73, 0.16);
+  --agy-syn-del-fg: #ffa198;
+  --agy-code-hl-line-bg: rgba(88, 166, 255, 0.13);
+  --agy-code-hl-line-border: #58a6ff;
   --agy-font-sans: var(--vscode-font-family, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif);
   --agy-font-mono: var(--vscode-editor-font-family, "SF Mono", Menlo, Monaco, Consolas, "Liberation Mono", monospace);
 }
@@ -49,24 +67,42 @@ body.vscode-high-contrast-light .markdown-preview.markdown-preview,
   --agy-surface: var(--vscode-editorWidget-background, #f8fafc);
   --agy-fg: var(--vscode-editor-foreground, #1e293b);
   --agy-heading: var(--vscode-editor-foreground, #0f172a);
-  --agy-muted: rgba(15, 23, 42, 0.055);
+  --agy-muted: color-mix(in srgb, var(--agy-bg) 93.5%, var(--agy-fg, #0f172a) 6.5%);
   --agy-muted-fg: var(--vscode-descriptionForeground, #52606d);
-  --agy-secondary: rgba(15, 23, 42, 0.04);
-  --agy-border: rgba(15, 23, 42, 0.15);
-  --agy-table-border: rgba(15, 23, 42, 0.14);
+  --agy-secondary: color-mix(in srgb, var(--agy-bg) 96%, #000000 4%);
+  --agy-border: color-mix(in srgb, var(--agy-fg, #0f172a) 15%, transparent);
+  --agy-table-border: color-mix(in srgb, var(--agy-fg, #0f172a) 14%, transparent);
   --agy-table-row-hover: rgba(15, 23, 42, 0.035);
   --agy-link: var(--vscode-textLink-foreground, #0969da);
   --agy-link-hover: var(--vscode-textLink-activeForeground, #0550ae);
   --agy-code-fg: #9a3412;
-  --agy-code-header-bg: rgba(15, 23, 42, 0.055);
-  --agy-inline-code-border: rgba(15, 23, 42, 0.1);
+  --agy-code-bg: color-mix(in srgb, var(--agy-bg) 95%, #000000 5%);
+  --agy-code-header-bg: color-mix(in srgb, var(--agy-bg) 91%, #000000 9%);
+  --agy-inline-code-border: color-mix(in srgb, var(--agy-fg, #0f172a) 10%, transparent);
   --agy-blockquote-bg: rgba(15, 23, 42, 0.03);
-  --agy-toolbar-bg: rgba(255, 255, 255, 0.85);
+  --agy-toolbar-bg: color-mix(in srgb, var(--agy-bg) 88%, transparent);
   --agy-alert-note: #0969da;
   --agy-alert-tip: #1a7f37;
   --agy-alert-important: #8250df;
   --agy-alert-warning: #9a6700;
   --agy-alert-caution: #cf222e;
+  --agy-syn-fg: var(--vscode-editor-foreground, #1e293b);
+  --agy-syn-keyword: #d73a49;
+  --agy-syn-type: #0550ae;
+  --agy-syn-function: #6f42c1;
+  --agy-syn-string: #b45309;
+  --agy-syn-number: #7c3aed;
+  --agy-syn-param: #c2410c;
+  --agy-syn-attr: #0369a1;
+  --agy-syn-meta: #c2410c;
+  --agy-syn-comment: #64748b;
+  --agy-syn-punct: #475569;
+  --agy-syn-add-bg: rgba(26, 127, 55, 0.12);
+  --agy-syn-add-fg: #116329;
+  --agy-syn-del-bg: rgba(207, 34, 46, 0.12);
+  --agy-syn-del-fg: #a40e26;
+  --agy-code-hl-line-bg: rgba(9, 105, 218, 0.09);
+  --agy-code-hl-line-border: #0969da;
 }
 
 @media print {
@@ -83,6 +119,18 @@ body.vscode-high-contrast-light .markdown-preview.markdown-preview,
     --agy-border: #cbd5e1 !important;
     --agy-table-border: #cbd5e1 !important;
     --agy-code-fg: #9a3412 !important;
+    --agy-code-bg: #f8fafc !important;
+    --agy-syn-fg: #1e293b !important;
+    --agy-syn-keyword: #d73a49 !important;
+    --agy-syn-type: #0550ae !important;
+    --agy-syn-function: #6f42c1 !important;
+    --agy-syn-string: #b45309 !important;
+    --agy-syn-number: #7c3aed !important;
+    --agy-syn-param: #c2410c !important;
+    --agy-syn-attr: #0369a1 !important;
+    --agy-syn-meta: #c2410c !important;
+    --agy-syn-comment: #64748b !important;
+    --agy-syn-punct: #475569 !important;
   }
 }
 
@@ -441,7 +489,7 @@ body.agy-review-body :not(pre) > code:not(.language-mermaid),
 .agy-code-block {
   margin: 0.75rem 0 !important;
   border-radius: 0.75rem !important;
-  background-color: var(--agy-muted) !important;
+  background-color: var(--agy-code-bg, var(--agy-muted)) !important;
   border: 1px solid var(--agy-border) !important;
   overflow: hidden !important;
 }
@@ -450,6 +498,7 @@ body.agy-review-body :not(pre) > code:not(.language-mermaid),
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 8px;
   padding: 0.35rem 0.75rem;
   background: var(--agy-code-header-bg);
   border-bottom: 1px solid var(--agy-inline-code-border);
@@ -459,10 +508,36 @@ body.agy-review-body :not(pre) > code:not(.language-mermaid),
   user-select: none;
 }
 
+.agy-code-header-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  overflow: hidden;
+}
+
 .agy-code-lang {
   text-transform: lowercase;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  color: var(--agy-muted-fg);
+  opacity: 0.92;
+}
+
+.agy-code-title {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: var(--agy-muted);
+  border: 1px solid var(--agy-inline-code-border);
+  color: var(--agy-fg);
+  font-family: var(--agy-font-mono);
+  font-size: 10.5px;
   font-weight: 500;
-  opacity: 0.85;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .agy-copy-btn {
@@ -478,11 +553,16 @@ body.agy-review-body :not(pre) > code:not(.language-mermaid),
   font-size: 11px;
   cursor: pointer;
   transition: all 0.12s ease;
+  flex-shrink: 0;
 }
 
 .agy-copy-btn:hover {
   background: rgba(128, 128, 128, 0.14);
   color: var(--agy-fg);
+}
+
+.agy-copy-btn.copied {
+  color: var(--agy-alert-tip);
 }
 
 body.vscode-body pre:not(.mermaid),
@@ -491,19 +571,27 @@ body.agy-review-body pre:not(.mermaid),
   font-family: var(--agy-font-mono) !important;
   font-size: 12.5px !important;
   line-height: 1.55 !important;
-  background-color: var(--agy-muted) !important;
-  color: var(--agy-fg) !important;
+  background-color: var(--agy-code-bg, var(--agy-muted)) !important;
+  color: var(--agy-syn-fg, var(--agy-fg)) !important;
   padding: 0.75rem 1rem !important;
   margin: 0.75rem 0 !important;
   border-radius: 0.75rem !important;
   border: 1px solid var(--agy-border) !important;
   overflow-x: auto !important;
+  white-space: pre !important;
+  tab-size: 4;
 }
 
+body.vscode-body .agy-code-block pre:not(.mermaid),
+body.agy-review-body .agy-code-block pre:not(.mermaid),
+.markdown-preview.markdown-preview .agy-code-block pre:not(.mermaid),
+.agy-code-block > pre:not(.mermaid),
 .agy-code-block pre:not(.mermaid) {
   margin: 0 !important;
   border: none !important;
   border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
 }
 
 body.vscode-body pre:not(.mermaid) code,
@@ -511,10 +599,201 @@ body.agy-review-body pre:not(.mermaid) code,
 .markdown-preview.markdown-preview pre:not(.mermaid) code {
   font-family: var(--agy-font-mono) !important;
   background: transparent !important;
-  color: inherit !important;
+  color: var(--agy-syn-fg, var(--agy-fg)) !important;
   padding: 0 !important;
   border: none !important;
   font-size: inherit !important;
+  line-height: inherit !important;
+  white-space: pre !important;
+}
+
+/* Line Highlighting & Optional Line Numbers */
+.agy-code-line {
+  display: inline-block;
+  min-width: 100%;
+  box-sizing: border-box;
+  padding: 0 0.25rem;
+  margin: 0 -0.25rem;
+  border-left: 2px solid transparent;
+}
+
+.agy-code-line.agy-code-line-hl {
+  background-color: var(--agy-code-hl-line-bg);
+  border-left-color: var(--agy-code-hl-line-border);
+  border-radius: 0 3px 3px 0;
+}
+
+.agy-code-line[data-line-num]::before {
+  content: attr(data-line-num);
+  display: inline-block;
+  width: 2.1rem;
+  margin-right: 0.85rem;
+  text-align: right;
+  color: var(--agy-muted-fg);
+  opacity: 0.48;
+  user-select: none;
+  -webkit-user-select: none;
+  pointer-events: none;
+}
+
+/* --------------------------------------------------------------------------
+   Syntax Highlighting Palette (Antigravity Okaidia Dark & Crisp Light)
+   Covers Highlight.js (.hljs-*) and Prism.js / Crossnote (.token.*)
+   -------------------------------------------------------------------------- */
+pre code .hljs,
+pre.hljs {
+  background: transparent !important;
+  color: var(--agy-syn-fg, var(--agy-fg)) !important;
+}
+
+/* Container spans that wrap expressions or parameter lists */
+pre code .hljs-params,
+pre code .hljs-function,
+pre code .hljs-subst,
+pre code .token.interpolation {
+  color: var(--agy-syn-fg, var(--agy-fg)) !important;
+}
+
+/* Comments, Docstrings & Quotes */
+pre code .hljs-comment,
+pre code .hljs-quote,
+pre code .token.comment,
+pre code .token.prolog,
+pre code .token.doctype,
+pre code .token.cdata {
+  color: var(--agy-syn-comment) !important;
+  font-style: italic !important;
+}
+
+/* Keywords, Storage, Operators & Markup Tags */
+pre code .hljs-keyword,
+pre code .hljs-selector-tag,
+pre code .hljs-operator,
+pre code .hljs-tag,
+pre code .hljs-name,
+pre code .hljs-meta .hljs-keyword,
+pre code .token.keyword,
+pre code .token.operator,
+pre code .token.tag,
+pre code .token.atrule,
+pre code .token.important {
+  color: var(--agy-syn-keyword) !important;
+}
+
+/* Types, Classes, Interfaces, Built-ins & Namespaces */
+pre code .hljs-type,
+pre code .hljs-built_in,
+pre code .hljs-class .hljs-title,
+pre code .hljs-title.class_,
+pre code .hljs-title.class_.inherited__,
+pre code .token.class-name,
+pre code .token.builtin,
+pre code .token.namespace {
+  color: var(--agy-syn-type) !important;
+}
+
+/* Functions, Methods & Invocations */
+pre code .hljs-title,
+pre code .hljs-title.function_,
+pre code .hljs-title.function_.invoke__,
+pre code .hljs-function > .hljs-title,
+pre code .hljs-section,
+pre code .hljs-selector-id,
+pre code .hljs-selector-class,
+pre code .token.function,
+pre code .token.method,
+pre code .token.selector {
+  color: var(--agy-syn-function) !important;
+}
+
+/* Strings, Template Literals, Regexes & Doc-tags */
+pre code .hljs-string,
+pre code .hljs-meta-string,
+pre code .hljs-meta .hljs-string,
+pre code .hljs-regexp,
+pre code .hljs-template-tag,
+pre code .token.string,
+pre code .token.char,
+pre code .token.regex,
+pre code .token.attr-value,
+pre code .token.url {
+  color: var(--agy-syn-string) !important;
+}
+
+/* Numbers, Booleans, Literals, Constants, Symbols & Escapes */
+pre code .hljs-number,
+pre code .hljs-literal,
+pre code .hljs-literal .hljs-keyword,
+pre code .hljs-symbol,
+pre code .hljs-bullet,
+pre code .hljs-char.escape_,
+pre code .hljs-variable.constant_,
+pre code .hljs-link,
+pre code .token.number,
+pre code .token.boolean,
+pre code .token.constant,
+pre code .token.symbol,
+pre code .token.entity {
+  color: var(--agy-syn-number) !important;
+}
+
+/* Self / This / Super, Decorators, Preprocessor Directives & Meta */
+pre code .hljs-variable.language_,
+pre code .hljs-template-variable,
+pre code .hljs-meta,
+pre code .hljs-meta-keyword,
+pre code .hljs-doctag,
+pre code .hljs-selector-attr,
+pre code .hljs-selector-pseudo,
+pre code .token.decorator,
+pre code .token.annotation,
+pre code .token.parameter {
+  color: var(--agy-syn-param) !important;
+}
+
+/* Object Properties, HTML/JSON/YAML Keys, Keyword Arguments & CLI Flags */
+pre code .hljs-attr,
+pre code .hljs-attribute,
+pre code .hljs-property,
+pre code .hljs-variable,
+pre code .hljs-builtin-name,
+pre code .token.property,
+pre code .token.attr-name,
+pre code .token.variable {
+  color: var(--agy-syn-attr) !important;
+}
+
+/* Punctuation */
+pre code .hljs-punctuation,
+pre code .token.punctuation {
+  color: var(--agy-syn-punct) !important;
+}
+
+/* Diff Additions & Deletions */
+pre code .hljs-addition,
+pre code .token.inserted {
+  color: var(--agy-syn-add-fg) !important;
+  background-color: var(--agy-syn-add-bg) !important;
+  border-radius: 3px;
+  padding: 0 3px;
+}
+
+pre code .hljs-deletion,
+pre code .token.deleted {
+  color: var(--agy-syn-del-fg) !important;
+  background-color: var(--agy-syn-del-bg) !important;
+  border-radius: 3px;
+  padding: 0 3px;
+}
+
+pre code .hljs-emphasis,
+pre code .token.italic {
+  font-style: italic !important;
+}
+
+pre code .hljs-strong,
+pre code .token.bold {
+  font-weight: 600 !important;
 }
 
 /* --------------------------------------------------------------------------
