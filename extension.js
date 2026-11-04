@@ -1,0 +1,1771 @@
+"use strict";
+
+const vscode = require("vscode");
+const fs = require("fs");
+const path = require("path");
+const os = require("os");
+
+const BRAIN_UUID_RE = /\/brain\/([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})\//;
+
+const ALERT_ICONS = {
+  note: '<svg class="octicon" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>',
+  tip: '<svg class="octicon" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M8 1.5c-2.363 0-4 1.69-4 3.75 0 .984.424 1.625.984 2.304l.214.253c.223.264.47.556.673.848.284.411.537.896.621 1.49a.75.75 0 0 1-1.484.211c-.04-.282-.163-.547-.37-.847a8.456 8.456 0 0 0-.542-.68c-.084-.1-.173-.205-.268-.32C3.201 7.75 2.5 6.766 2.5 5.25 2.5 2.31 4.863 0 8 0s5.5 2.31 5.5 5.25c0 1.516-.701 2.5-1.328 3.259-.095.115-.184.22-.268.319-.207.245-.383.453-.541.681-.208.3-.33.565-.37.847a.751.751 0 0 1-1.485-.212c.084-.593.337-1.078.621-1.489.203-.292.45-.584.673-.848.075-.088.147-.173.213-.253.561-.679.985-1.32.985-2.304 0-2.06-1.637-3.75-4-3.75ZM5.75 12h4.5a.75.75 0 0 1 0 1.5h-4.5a.75.75 0 0 1 0-1.5ZM6 15.25a.75.75 0 0 1 .75-.75h2.5a.75.75 0 0 1 0 1.5h-2.5a.75.75 0 0 1-.75-.75Z"></path></svg>',
+  important: '<svg class="octicon" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M0 1.75C0 .784.784 0 1.75 0h12.5C15.216 0 16 .784 16 1.75v9.5A1.75 1.75 0 0 1 14.25 13H8.06l-2.573 2.573A1.458 1.458 0 0 1 3 14.543V13H1.75A1.75 1.75 0 0 1 0 11.25Zm1.75-.25a.25.25 0 0 0-.25.25v9.5c0 .138.112.25.25.25h2a.75.75 0 0 1 .75.75v2.19l2.72-2.72a.749.749 0 0 1 .53-.22h6.5a.25.25 0 0 0 .25-.25v-9.5a.25.25 0 0 0-.25-.25Zm7 2.25v2.5a.75.75 0 0 1-1.5 0v-2.5a.75.75 0 0 1 1.5 0ZM9 9a1 1 0 1 1-2 0 1 1 0 0 1 2 0Z"></path></svg>',
+  warning: '<svg class="octicon" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M6.457 1.047c.659-1.234 2.427-1.234 3.086 0l6.082 11.378A1.75 1.75 0 0 1 14.082 15H1.918a1.75 1.75 0 0 1-1.543-2.575Zm1.763.707a.25.25 0 0 0-.44 0L1.698 13.132a.25.25 0 0 0 .22.368h12.164a.25.25 0 0 0 .22-.368Zm.53 3.996v2.5a.75.75 0 0 1-1.5 0v-2.5a.75.75 0 0 1 1.5 0ZM9 11a1 1 0 1 1-2 0 1 1 0 0 1 2 0Z"></path></svg>',
+  caution: '<svg class="octicon" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M4.47.22A.749.749 0 0 1 5 0h6c.199 0 .389.079.53.22l4.25 4.25c.141.14.22.331.22.53v6a.749.749 0 0 1-.22.53l-4.25 4.25A.749.749 0 0 1 11 16H5a.749.749 0 0 1-.53-.22L.22 11.53A.749.749 0 0 1 0 11V5c0-.199.079-.389.22-.53Zm.84 1.28L1.5 5.31v5.38l3.81 3.81h5.38l3.81-3.81V5.31L10.69 1.5ZM8 4a.75.75 0 0 1 .75.75v3.5a.75.75 0 0 1-1.5 0v-3.5A.75.75 0 0 1 8 4Zm0 8a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>'
+};
+
+const ALERT_LABELS = {
+  note: "Note",
+  tip: "Tip",
+  important: "Important",
+  warning: "Warning",
+  caution: "Caution"
+};
+
+function resolveRealFileInfo(uri) {
+  const fsPath = uri.fsPath;
+  let realPath = fsPath;
+  let isSymlink = false;
+  try {
+    const lstat = fs.lstatSync(fsPath);
+    if (lstat.isSymbolicLink()) {
+      isSymlink = true;
+      realPath = fs.realpathSync(fsPath);
+    } else {
+      realPath = fs.realpathSync(fsPath);
+    }
+  } catch (_) {
+    // ignore
+  }
+  const normalized = realPath.replace(/\\/g, "/");
+  const match = normalized.match(BRAIN_UUID_RE);
+  const cascadeId = match ? match[1] : null;
+  return {
+    fsPath,
+    realPath,
+    isSymlink,
+    cascadeId,
+    isBrainArtifact: Boolean(cascadeId)
+  };
+}
+
+const lastEditorLineByPath = new Map();
+const lastRevealedLineByEditor = new WeakMap();
+
+function getTopVisibleLine(editor) {
+  if (!editor || !editor.visibleRanges || !editor.visibleRanges.length) {
+    return undefined;
+  }
+  const start = editor.visibleRanges[0].start;
+  const lineNumber = start.line;
+  const lineText = editor.document.lineAt(lineNumber).text;
+  const progress = start.character / (lineText.length + 2);
+  return lineNumber + progress;
+}
+
+function revealEditorAtLine(editor, fractionalLine, force = false) {
+  if (!editor || typeof fractionalLine !== "number" || Number.isNaN(fractionalLine)) {
+    return;
+  }
+  const docLineCount = editor.document.lineCount;
+  if (docLineCount <= 0) return;
+  const targetLine = Math.max(0, Math.min(docLineCount - 1, Math.round(fractionalLine)));
+  if (!force && lastRevealedLineByEditor.get(editor) === targetLine) {
+    return;
+  }
+  lastRevealedLineByEditor.set(editor, targetLine);
+  const range = new vscode.Range(targetLine, 0, targetLine, 0);
+  editor.revealRange(range, vscode.TextEditorRevealType.AtTop);
+}
+
+function isMatchingDocumentUri(uri, info) {
+  if (!uri || !info) return false;
+  const fsPath = uri.fsPath;
+  if (fsPath === info.fsPath || fsPath === info.realPath) return true;
+  try {
+    const real = fs.realpathSync(fsPath);
+    return real === info.realPath || real === info.fsPath;
+  } catch (_) {
+    return false;
+  }
+}
+
+function findMatchingVisibleEditors(info) {
+  return vscode.window.visibleTextEditors.filter(
+    (ed) => ed && ed.document && isMatchingDocumentUri(ed.document.uri, info)
+  );
+}
+
+function getOpenRawEditorTabs(info) {
+  const rawTabs = [];
+  if (!vscode.window.tabGroups || !vscode.window.tabGroups.all) {
+    return rawTabs;
+  }
+  for (const group of vscode.window.tabGroups.all) {
+    for (const tab of group.tabs) {
+      const input = tab.input;
+      if (
+        input &&
+        input.uri &&
+        !input.viewType &&
+        isMatchingDocumentUri(input.uri, info)
+      ) {
+        rawTabs.push(tab);
+      }
+    }
+  }
+  return rawTabs;
+}
+
+function isRawSplitOpen(info) {
+  if (findMatchingVisibleEditors(info).length > 0) {
+    return true;
+  }
+  return getOpenRawEditorTabs(info).length > 0;
+}
+
+function recordEditorPosition(editor) {
+  if (!editor || !editor.document) return;
+  const line = getTopVisibleLine(editor);
+  if (typeof line !== "number" || Number.isNaN(line)) return;
+  const info = resolveRealFileInfo(editor.document.uri);
+  lastEditorLineByPath.set(info.fsPath, line);
+  lastEditorLineByPath.set(info.realPath, line);
+}
+
+async function renderMarkdownWithCarousels(markdownText, renderFn) {
+  const srcText = String(markdownText || "");
+  const totalLines = srcText.split(/\r?\n/).length;
+  const carousels = [];
+  const withPlaceholders = srcText.replace(
+    /(`{3,})carousel[^\n]*\n([\s\S]*?)\n\1(?:\s*$|\s*\n)/gm,
+    (fullMatch, _fence, inner, offset) => {
+      const slides = inner
+        .split(/<!--\s*slide\s*-->/i)
+        .map((s) => s.trim())
+        .filter(Boolean);
+      if (!slides.length) return fullMatch;
+      const startLine = srcText.slice(0, offset).split("\n").length - 1;
+      const newlineCount = (fullMatch.match(/\n/g) || []).length;
+      const fenceLines = fullMatch.replace(/\s+$/, "").split("\n").length;
+      const endLine = startLine + Math.max(1, fenceLines - 1);
+      const idx = carousels.length;
+      carousels.push({ slides, startLine, endLine });
+      return `<div data-agy-carousel-placeholder="${idx}"></div>` + "\n".repeat(newlineCount);
+    }
+  );
+
+  let mainHtml = await renderFn(withPlaceholders);
+  mainHtml = postprocessAlertsInHtml(mainHtml);
+
+  for (let i = 0; i < carousels.length; i++) {
+    const { slides, startLine, endLine } = carousels[i];
+    const renderedSlides = [];
+    for (let sIdx = 0; sIdx < slides.length; sIdx++) {
+      let slideHtml = await renderFn(slides[sIdx]);
+      slideHtml = postprocessAlertsInHtml(slideHtml);
+      slideHtml = slideHtml
+        .replace(/\s*\bdata-line(?:-end)?=["'][^"']*["']/gi, "")
+        .replace(/\bcode-line\b\s*/g, "");
+      renderedSlides.push(
+        `<div class="agy-carousel-slide${sIdx === 0 ? " active" : ""}">${slideHtml}</div>`
+      );
+    }
+    const carouselHtml =
+      `<div class="agy-carousel code-line" data-line="${startLine}" data-line-end="${endLine}">` +
+      `<div class="agy-carousel-header">` +
+      `<span class="agy-carousel-counter">Slide 1 of ${slides.length}</span>` +
+      `<div class="agy-carousel-controls">` +
+      `<button type="button" class="agy-btn agy-carousel-prev">← Prev</button>` +
+      `<button type="button" class="agy-btn agy-carousel-next">Next →</button>` +
+      `</div>` +
+      `</div>` +
+      `${renderedSlides.join("")}` +
+      `</div>`;
+
+    const placeholderRe = new RegExp(
+      `(?:<div[^>]*class=["'][^"']*\\bcode-line\\b[^"']*["'][^>]*>\\s*<\\/div>\\s*)?(?:<p[^>]*>\\s*)?<div data-agy-carousel-placeholder="${i}"><\\/div>(?:\\s*<\\/p>)?`,
+      "g"
+    );
+    mainHtml = mainHtml.replace(placeholderRe, carouselHtml);
+  }
+
+  return `${mainHtml}\n<div class="code-line agy-scroll-sentinel" data-line="${totalLines}"></div>`;
+}
+
+function postprocessAlertsInHtml(html) {
+  let out = String(html || "").replace(
+    /<blockquote\b([^>]*)>\s*<p\b([^>]*)>\[!(NOTE|TIP|IMPORTANT|WARNING|CAUTION)\](?:\s*<br\s*\/?>|\s*\n|\s+)?([\s\S]*?)<\/blockquote>/gi,
+    (_, bqAttrs, pAttrs, rawType, innerRest) => {
+      const type = rawType.toLowerCase();
+      const icon = ALERT_ICONS[type] || "";
+      const label = ALERT_LABELS[type] || rawType;
+      const combinedAttrs = `${bqAttrs || ""} ${pAttrs || ""}`;
+      const dlMatch = combinedAttrs.match(/\bdata-line=["'](\d+)["']/i);
+      const dleMatch = combinedAttrs.match(/\bdata-line-end=["'](\d+)["']/i);
+      const dlAttr = dlMatch ? ` data-line="${dlMatch[1]}"` : "";
+      const dleAttr = dleMatch ? ` data-line-end="${dleMatch[1]}"` : "";
+      const body = innerRest.trim().startsWith("</p>")
+        ? innerRest.trim().slice(4)
+        : `<p>${innerRest}`;
+      return (
+        `<div class="markdown-alert markdown-alert-${type} code-line"${dlAttr}${dleAttr}>` +
+        `<p class="markdown-alert-title">${icon}${label}</p>` +
+        `${body}` +
+        `</div>`
+      );
+    }
+  );
+
+  // Unwrap Mermaid blocks produced by vscode.mermaid-markdown-features or standard fences
+  out = out.replace(
+    /<pre\b[^>]*\bclass=["'][^"']*\bmermaid\b[^"']*["'][^>]*>([\s\S]*?)<\/pre>/gi,
+    (full, inner) => {
+      const trimmed = inner.trim();
+      const dlMatch = full.match(/\bdata-line=["'](\d+)["']/i);
+      const startLine = dlMatch ? parseInt(dlMatch[1], 10) : null;
+      const lineSpan = (trimmed.match(/\n/g) || []).length + 2;
+      const lineAttrs =
+        startLine !== null && !Number.isNaN(startLine)
+          ? ` data-line="${startLine}" data-line-end="${startLine + lineSpan}"`
+          : "";
+      return `<div class="agy-mermaid-container code-line"${lineAttrs}><div class="mermaid">${trimmed}</div></div>`;
+    }
+  );
+  out = out.replace(
+    /<pre\b[^>]*>\s*<code\b[^>]*\bclass=["'][^"']*(?:language-mermaid|lang-mermaid)[^"']*["'][^>]*>([\s\S]*?)<\/code>\s*<\/pre>/gi,
+    (full, inner) => {
+      const trimmed = inner.trim();
+      const dlMatch = full.match(/\bdata-line=["'](\d+)["']/i);
+      const startLine = dlMatch ? parseInt(dlMatch[1], 10) : null;
+      const lineSpan = (trimmed.match(/\n/g) || []).length + 2;
+      const lineAttrs =
+        startLine !== null && !Number.isNaN(startLine)
+          ? ` data-line="${startLine}" data-line-end="${startLine + lineSpan}"`
+          : "";
+      return `<div class="agy-mermaid-container code-line"${lineAttrs}><div class="mermaid">${trimmed}</div></div>`;
+    }
+  );
+
+  return out;
+}
+
+class AntigravityMarkdownReviewProvider {
+  constructor(context) {
+    this.context = context;
+  }
+
+  async openCustomDocument(uri) {
+    return {
+      uri,
+      dispose: () => {}
+    };
+  }
+
+  async resolveCustomEditor(document, webviewPanel) {
+    const webview = webviewPanel.webview;
+    const info = resolveRealFileInfo(document.uri);
+    const localRoots = [
+      vscode.Uri.joinPath(this.context.extensionUri, "media"),
+      vscode.Uri.file(path.dirname(info.fsPath)),
+      vscode.Uri.file(path.dirname(info.realPath)),
+      vscode.Uri.file(os.homedir())
+    ];
+    if (vscode.workspace.workspaceFolders) {
+      for (const wf of vscode.workspace.workspaceFolders) {
+        localRoots.push(wf.uri);
+      }
+    }
+
+    webview.options = {
+      enableScripts: true,
+      localResourceRoots: localRoots
+    };
+
+    let lastRawText = null;
+    let lastIsLightTheme = null;
+    let isWebviewInitialized = false;
+    let renderTimer = null;
+
+    let syncScrollEnabled = vscode.workspace
+      .getConfiguration("agyMarkdown")
+      .get("syncScroll", true);
+    let suppressEditorToPreviewUntil = 0;
+    let suppressPreviewToEditorUntil = 0;
+    let lastSyncedLine = 0;
+
+    const initialMatchingEditors = findMatchingVisibleEditors(info);
+    if (initialMatchingEditors.length > 0) {
+      const topLine = getTopVisibleLine(initialMatchingEditors[0]);
+      if (typeof topLine === "number" && !Number.isNaN(topLine)) {
+        lastSyncedLine = topLine;
+      }
+    } else if (lastEditorLineByPath.has(info.realPath)) {
+      lastSyncedLine = lastEditorLineByPath.get(info.realPath) || 0;
+    } else if (lastEditorLineByPath.has(info.fsPath)) {
+      lastSyncedLine = lastEditorLineByPath.get(info.fsPath) || 0;
+    }
+
+    const renderToWebview = async (force = false) => {
+      let rawText = "";
+      try {
+        rawText = fs.readFileSync(info.realPath, "utf8");
+      } catch (err) {
+        try {
+          rawText = fs.readFileSync(info.fsPath, "utf8");
+        } catch (err2) {
+          rawText = `# Unable to read file\n\n\`${info.fsPath}\``;
+        }
+      }
+
+      const themeKind = vscode.window.activeColorTheme
+        ? vscode.window.activeColorTheme.kind
+        : vscode.ColorThemeKind.Dark;
+      const isLightTheme =
+        themeKind === vscode.ColorThemeKind.Light ||
+        themeKind === vscode.ColorThemeKind.HighContrastLight;
+
+      if (
+        !force &&
+        isWebviewInitialized &&
+        rawText === lastRawText &&
+        isLightTheme === lastIsLightTheme
+      ) {
+        return;
+      }
+
+      const contentChanged = !isWebviewInitialized || rawText !== lastRawText;
+      lastRawText = rawText;
+      lastIsLightTheme = isLightTheme;
+
+      const displayPath = info.isSymlink
+        ? `${path.basename(info.fsPath)} → ${shortenHome(info.realPath)}`
+        : shortenHome(info.fsPath);
+
+      if (isWebviewInitialized && !force && !contentChanged) {
+        await webview.postMessage({
+          type: "updateTheme",
+          isLightTheme
+        });
+        return;
+      }
+
+      let renderedHtml = "";
+      try {
+        renderedHtml = await renderMarkdownWithCarousels(rawText, async (mdChunk) => {
+          return await vscode.commands.executeCommand("markdown.api.render", mdChunk);
+        });
+      } catch (_) {
+        renderedHtml = `<pre>${escapeHtml(rawText)}</pre>`;
+      }
+
+      renderedHtml = rewriteLocalImageUris(
+        renderedHtml,
+        webview,
+        path.dirname(info.realPath),
+        path.dirname(info.fsPath)
+      );
+
+      if (isWebviewInitialized && !force) {
+        await webview.postMessage({
+          type: "updateContent",
+          renderedHtml,
+          displayPath,
+          isLightTheme
+        });
+        return;
+      }
+
+      const cssUri = webview.asWebviewUri(
+        vscode.Uri.joinPath(this.context.extensionUri, "media", "antigravity-markdown.css")
+      );
+      const katexCssUri = webview.asWebviewUri(
+        vscode.Uri.joinPath(this.context.extensionUri, "media", "katex.min.css")
+      );
+      const mermaidJsUri = webview.asWebviewUri(
+        vscode.Uri.joinPath(this.context.extensionUri, "media", "mermaid.min.js")
+      );
+      const jsUri = webview.asWebviewUri(
+        vscode.Uri.joinPath(this.context.extensionUri, "media", "antigravity-markdown.js")
+      );
+
+      isWebviewInitialized = true;
+      webview.html = buildWebviewHtml({
+        cssUri,
+        katexCssUri,
+        mermaidJsUri,
+        jsUri,
+        renderedHtml,
+        displayPath,
+        isBrainArtifact: info.isBrainArtifact,
+        isSymlink: info.isSymlink,
+        isLightTheme,
+        syncScrollEnabled,
+        isSplitOpen: isRawSplitOpen(info),
+        initialLine: lastSyncedLine
+      });
+    };
+
+    const scheduleRender = (delayMs = 120) => {
+      if (renderTimer) {
+        clearTimeout(renderTimer);
+      }
+      renderTimer = setTimeout(() => {
+        renderTimer = null;
+        renderToWebview(false);
+      }, delayMs);
+    };
+
+    await renderToWebview(true);
+
+    const disposables = [
+      {
+        dispose: () => {
+          if (renderTimer) {
+            clearTimeout(renderTimer);
+            renderTimer = null;
+          }
+        }
+      }
+    ];
+
+    const broadcastSplitState = () => {
+      if (!isWebviewInitialized) return;
+      webview.postMessage({
+        type: "updateSplitState",
+        isOpen: isRawSplitOpen(info)
+      });
+    };
+
+    disposables.push(
+      vscode.window.onDidChangeVisibleTextEditors(() => {
+        broadcastSplitState();
+      })
+    );
+    if (vscode.window.tabGroups && typeof vscode.window.tabGroups.onDidChangeTabs === "function") {
+      disposables.push(
+        vscode.window.tabGroups.onDidChangeTabs(() => {
+          broadcastSplitState();
+        })
+      );
+    }
+
+    // Re-render when VS Code color theme changes
+    disposables.push(
+      vscode.window.onDidChangeActiveColorTheme(() => {
+        scheduleRender(40);
+      })
+    );
+
+    // Sync scroll from Raw Editor -> Preview in Split Edit mode
+    disposables.push(
+      vscode.window.onDidChangeTextEditorVisibleRanges((e) => {
+        if (!e || !e.textEditor || !isMatchingDocumentUri(e.textEditor.document.uri, info)) {
+          return;
+        }
+        const line = getTopVisibleLine(e.textEditor);
+        if (typeof line !== "number" || Number.isNaN(line)) return;
+        lastEditorLineByPath.set(info.realPath, line);
+        lastEditorLineByPath.set(info.fsPath, line);
+        lastSyncedLine = line;
+
+        if (!syncScrollEnabled || !webviewPanel.visible) return;
+        if (Date.now() < suppressEditorToPreviewUntil) return;
+
+        suppressPreviewToEditorUntil = Date.now() + 500;
+        webview.postMessage({
+          type: "scrollToLine",
+          line
+        });
+      })
+    );
+
+    // Keep syncScroll setting in sync if changed in VS Code settings
+    disposables.push(
+      vscode.workspace.onDidChangeConfiguration((e) => {
+        if (e.affectsConfiguration("agyMarkdown.syncScroll")) {
+          syncScrollEnabled = vscode.workspace
+            .getConfiguration("agyMarkdown")
+            .get("syncScroll", true);
+          webview.postMessage({
+            type: "updateSyncScroll",
+            enabled: syncScrollEnabled
+          });
+        }
+      })
+    );
+
+    // When preview panel becomes visible alongside a raw editor, align scroll position
+    disposables.push(
+      webviewPanel.onDidChangeViewState(() => {
+        broadcastSplitState();
+        if (!webviewPanel.visible || !syncScrollEnabled) return;
+        const editors = findMatchingVisibleEditors(info);
+        if (editors.length > 0) {
+          const line = getTopVisibleLine(editors[0]);
+          if (typeof line === "number" && !Number.isNaN(line)) {
+            lastSyncedLine = line;
+            suppressPreviewToEditorUntil = Date.now() + 500;
+            webview.postMessage({
+              type: "scrollToLine",
+              line,
+              instant: true
+            });
+          }
+        }
+      })
+    );
+
+    // Watch text document changes in VS Code
+    disposables.push(
+      vscode.workspace.onDidChangeTextDocument((e) => {
+        if (isMatchingDocumentUri(e.document.uri, info)) {
+          if (e.contentChanges && e.contentChanges.length > 0) {
+            scheduleRender(120);
+          }
+        }
+      })
+    );
+
+    // Watch underlying file on disk (including symlink target in brain)
+    const watchedPaths = new Set([info.fsPath, info.realPath]);
+    for (const wp of watchedPaths) {
+      try {
+        if (fs.existsSync(wp)) {
+          const watcher = fs.watch(wp, { persistent: false }, () => {
+            scheduleRender(150);
+          });
+          disposables.push({ dispose: () => watcher.close() });
+        }
+      } catch (_) {
+        // ignore watcher errors
+      }
+    }
+
+    // Handle toolbar, scroll sync, & link clicks from webview
+    disposables.push(
+      webview.onDidReceiveMessage(async (msg) => {
+        if (!msg || !msg.type) return;
+        if (msg.type === "revealLine" && typeof msg.line === "number") {
+          if (Number.isNaN(msg.line)) return;
+          lastSyncedLine = msg.line;
+          lastEditorLineByPath.set(info.realPath, msg.line);
+          lastEditorLineByPath.set(info.fsPath, msg.line);
+          if (!syncScrollEnabled) return;
+          if (Date.now() < suppressPreviewToEditorUntil) return;
+          const editors = findMatchingVisibleEditors(info);
+          if (!editors.length) return;
+          suppressEditorToPreviewUntil = Date.now() + 600;
+          for (const ed of editors) {
+            revealEditorAtLine(ed, msg.line);
+          }
+        } else if (msg.type === "toggleSyncScroll") {
+          syncScrollEnabled =
+            typeof msg.enabled === "boolean" ? msg.enabled : !syncScrollEnabled;
+          webview.postMessage({
+            type: "updateSyncScroll",
+            enabled: syncScrollEnabled
+          });
+          if (syncScrollEnabled) {
+            const editors = findMatchingVisibleEditors(info);
+            if (editors.length > 0 && typeof lastSyncedLine === "number") {
+              suppressEditorToPreviewUntil = Date.now() + 600;
+              for (const ed of editors) {
+                revealEditorAtLine(ed, lastSyncedLine, true);
+              }
+            }
+          }
+        } else if (msg.type === "toggleSplitEdit") {
+          const rawTabs = getOpenRawEditorTabs(info);
+          const visibleRawEditors = findMatchingVisibleEditors(info);
+          if (rawTabs.length > 0 || visibleRawEditors.length > 0) {
+            if (rawTabs.length > 0) {
+              try {
+                await vscode.window.tabGroups.close(rawTabs, true);
+              } catch (_) {}
+            } else if (visibleRawEditors.length > 0) {
+              try {
+                await vscode.window.showTextDocument(
+                  visibleRawEditors[0].document,
+                  visibleRawEditors[0].viewColumn,
+                  false
+                );
+                await vscode.commands.executeCommand("workbench.action.closeActiveEditor");
+              } catch (_) {}
+            }
+            broadcastSplitState();
+            return;
+          }
+
+          const targetLine =
+            typeof msg.line === "number" && !Number.isNaN(msg.line)
+              ? msg.line
+              : lastSyncedLine;
+          lastEditorLineByPath.set(info.realPath, targetLine);
+          lastEditorLineByPath.set(info.fsPath, targetLine);
+          suppressEditorToPreviewUntil = Date.now() + 650;
+          await vscode.commands.executeCommand(
+            "vscode.openWith",
+            document.uri,
+            "default",
+            vscode.ViewColumn.Beside
+          );
+          if (typeof targetLine === "number" && !Number.isNaN(targetLine) && targetLine > 0) {
+            const applyReveal = () => {
+              const editors = findMatchingVisibleEditors(info);
+              for (const ed of editors) {
+                revealEditorAtLine(ed, targetLine, true);
+              }
+            };
+            applyReveal();
+            setTimeout(applyReveal, 50);
+          }
+          broadcastSplitState();
+        } else if (msg.type === "editSource") {
+          const targetLine =
+            typeof msg.line === "number" && !Number.isNaN(msg.line)
+              ? msg.line
+              : lastSyncedLine;
+          lastEditorLineByPath.set(info.realPath, targetLine);
+          lastEditorLineByPath.set(info.fsPath, targetLine);
+          suppressEditorToPreviewUntil = Date.now() + 650;
+          await vscode.commands.executeCommand(
+            "vscode.openWith",
+            document.uri,
+            "default",
+            msg.beside ? vscode.ViewColumn.Beside : webviewPanel.viewColumn
+          );
+          if (typeof targetLine === "number" && !Number.isNaN(targetLine) && targetLine > 0) {
+            const applyReveal = () => {
+              const editors = findMatchingVisibleEditors(info);
+              for (const ed of editors) {
+                revealEditorAtLine(ed, targetLine, true);
+              }
+            };
+            applyReveal();
+            setTimeout(applyReveal, 50);
+          }
+          broadcastSplitState();
+        } else if (msg.type === "openNativeArtifact") {
+          await openInNativeArtifactViewer(info);
+        } else if (msg.type === "copyRaw") {
+          try {
+            const raw = fs.readFileSync(info.realPath, "utf8");
+            await vscode.env.clipboard.writeText(raw);
+            vscode.window.setStatusBarMessage(
+              "Antigravity: Copied raw Markdown to clipboard",
+              2500
+            );
+          } catch (_) {}
+        } else if (msg.type === "copyText" && typeof msg.text === "string") {
+          try {
+            await vscode.env.clipboard.writeText(msg.text);
+            vscode.window.setStatusBarMessage("Antigravity: Copied to clipboard", 2000);
+          } catch (_) {}
+        } else if (msg.type === "openLink") {
+          await handleWebviewLinkClick(msg.href, info);
+        }
+      })
+    );
+
+    webviewPanel.onDidDispose(() => {
+      for (const d of disposables) {
+        try {
+          d.dispose();
+        } catch (_) {}
+      }
+    });
+  }
+}
+
+async function openInNativeArtifactViewer(info) {
+  let targetUri = vscode.Uri.file(info.realPath);
+  if (info.cascadeId) {
+    targetUri = targetUri.with({ query: `cascadeId=${info.cascadeId}` });
+  }
+  try {
+    await vscode.commands.executeCommand("vscode.openWith", targetUri, "antigravity.artifactEditor");
+  } catch (_) {
+    vscode.window.showInformationMessage("Native Antigravity Artifact Viewer is not available for this file.");
+  }
+}
+
+async function handleWebviewLinkClick(href, currentInfo) {
+  if (!href) return;
+
+  if (href.startsWith("conversation://")) {
+    const convId = href.replace(/^conversation:\/\//i, "").trim().replace(/\/$/, "");
+    try {
+      await vscode.commands.executeCommand("antigravity.openConversation", convId);
+      return;
+    } catch (_) {
+      // Fallback: open that conversation's brain directory or PROJECT_HUB.md if present
+      const candidates = [
+        path.join(os.homedir(), ".gemini", "antigravity-cli", "brain", convId, "PROJECT_HUB.md"),
+        path.join(os.homedir(), ".gemini", "antigravity", "brain", convId, "PROJECT_HUB.md")
+      ];
+      for (const c of candidates) {
+        if (fs.existsSync(c)) {
+          await vscode.commands.executeCommand("vscode.open", vscode.Uri.file(c));
+          return;
+        }
+      }
+      return;
+    }
+  }
+
+  if (/^https?:\/\//i.test(href) || /^mailto:/i.test(href)) {
+    await vscode.env.openExternal(vscode.Uri.parse(href));
+    return;
+  }
+
+  // Handle file:// or relative file paths with optional #L10-L20 line fragments
+  let rawPath = href;
+  let fragment = "";
+  const hashIdx = rawPath.indexOf("#");
+  if (hashIdx !== -1) {
+    fragment = rawPath.slice(hashIdx + 1);
+    rawPath = rawPath.slice(0, hashIdx);
+  }
+
+  let targetFsPath = "";
+  if (rawPath.startsWith("file://")) {
+    try {
+      targetFsPath = vscode.Uri.parse(rawPath).fsPath;
+    } catch (_) {
+      targetFsPath = decodeURIComponent(rawPath.replace(/^file:\/\//i, ""));
+    }
+  } else if (rawPath) {
+    targetFsPath = path.resolve(path.dirname(currentInfo.realPath), decodeURIComponent(rawPath));
+  } else {
+    return;
+  }
+
+  if (!fs.existsSync(targetFsPath)) {
+    // Also try resolving relative to the shortcut's directory
+    const altPath = path.resolve(path.dirname(currentInfo.fsPath), decodeURIComponent(rawPath));
+    if (fs.existsSync(altPath)) {
+      targetFsPath = altPath;
+    }
+  }
+
+  const targetUri = vscode.Uri.file(targetFsPath);
+  const lineMatch = fragment.match(/^L(\d+)(?:-L?(\d+))?$/i);
+  if (lineMatch) {
+    const startLine = Math.max(0, parseInt(lineMatch[1], 10) - 1);
+    const endLine = lineMatch[2] ? Math.max(startLine, parseInt(lineMatch[2], 10) - 1) : startLine;
+    const doc = await vscode.workspace.openTextDocument(targetUri);
+    const editor = await vscode.window.showTextDocument(doc);
+    const range = new vscode.Range(startLine, 0, endLine, 999);
+    editor.selection = new vscode.Selection(range.start, range.end);
+    editor.revealRange(range, vscode.TextEditorRevealType.InCenter);
+    return;
+  }
+
+  if (/\.(md|markdown)$/i.test(targetFsPath)) {
+    await vscode.commands.executeCommand("vscode.openWith", targetUri, "antigravity.markdownReview");
+  } else {
+    await vscode.commands.executeCommand("vscode.open", targetUri);
+  }
+}
+
+function resolveLocalAssetPath(rawSrc, baseDir, fallbackDir) {
+  let decoded = rawSrc;
+  try {
+    decoded = decodeURIComponent(rawSrc.replace(/^file:\/\//i, ""));
+  } catch (_) {}
+
+  if (rawSrc.startsWith("file://")) {
+    try {
+      const parsed = vscode.Uri.parse(rawSrc).fsPath;
+      if (fs.existsSync(parsed)) return parsed;
+    } catch (_) {}
+  }
+
+  if (path.isAbsolute(decoded) && fs.existsSync(decoded)) {
+    return decoded;
+  }
+
+  const relCleaned = decoded.replace(/^\/+/, "");
+  const startDirs = [baseDir, fallbackDir].filter(Boolean);
+  for (const startDir of startDirs) {
+    // Check relative to startDir first
+    const direct = path.resolve(startDir, decoded);
+    if (fs.existsSync(direct)) return direct;
+
+    // Walk up ancestor directories for root-relative paths like /assets/...
+    let curr = startDir;
+    while (curr && curr !== path.dirname(curr)) {
+      const cand = path.join(curr, relCleaned);
+      if (fs.existsSync(cand)) return cand;
+      curr = path.dirname(curr);
+    }
+  }
+
+  if (vscode.workspace.workspaceFolders) {
+    for (const wf of vscode.workspace.workspaceFolders) {
+      const cand = path.join(wf.uri.fsPath, relCleaned);
+      if (fs.existsSync(cand)) return cand;
+    }
+  }
+
+  return path.resolve(baseDir || "", relCleaned);
+}
+
+const IMAGE_DIM_CACHE = new Map();
+const ASSET_CACHE_VERSION = Date.now();
+
+function getImageDimensions(fsPath) {
+  if (!fsPath) return null;
+  try {
+    const stat = fs.statSync(fsPath);
+    if (!stat.isFile()) return null;
+    const cacheKey = `${fsPath}:${stat.mtimeMs}:${stat.size}`;
+    if (IMAGE_DIM_CACHE.has(cacheKey)) {
+      return IMAGE_DIM_CACHE.get(cacheKey);
+    }
+
+    const ext = path.extname(fsPath).toLowerCase();
+    let dims = null;
+
+    if (ext === ".svg") {
+      const fd = fs.openSync(fsPath, "r");
+      const buf = Buffer.alloc(Math.min(2048, stat.size));
+      fs.readSync(fd, buf, 0, buf.length, 0);
+      fs.closeSync(fd);
+      const head = buf.toString("utf8");
+      const vbMatch = head.match(
+        /\bviewBox=["']\s*[-+\d.]+\s+[-+\d.]+\s+(\d+(?:\.\d+)?)\s+(\d+(?:\.\d+)?)\s*["']/i
+      );
+      if (vbMatch) {
+        const w = Math.round(parseFloat(vbMatch[1]));
+        const h = Math.round(parseFloat(vbMatch[2]));
+        if (w > 0 && h > 0) dims = { width: w, height: h };
+      } else {
+        const wMatch = head.match(/\bwidth=["']\s*(\d+(?:\.\d+)?)(?:px)?\s*["']/i);
+        const hMatch = head.match(/\bheight=["']\s*(\d+(?:\.\d+)?)(?:px)?\s*["']/i);
+        if (wMatch && hMatch) {
+          const w = Math.round(parseFloat(wMatch[1]));
+          const h = Math.round(parseFloat(hMatch[1]));
+          if (w > 0 && h > 0) dims = { width: w, height: h };
+        }
+      }
+    } else {
+      const fd = fs.openSync(fsPath, "r");
+      const readLen = Math.min(32768, stat.size);
+      const buf = Buffer.alloc(readLen);
+      fs.readSync(fd, buf, 0, readLen, 0);
+      fs.closeSync(fd);
+
+      // PNG: 8-byte signature + IHDR chunk (width at 16, height at 20)
+      if (
+        readLen >= 24 &&
+        buf[0] === 0x89 &&
+        buf[1] === 0x50 &&
+        buf[2] === 0x4e &&
+        buf[3] === 0x47
+      ) {
+        const w = buf.readUInt32BE(16);
+        const h = buf.readUInt32BE(20);
+        if (w > 0 && h > 0) dims = { width: w, height: h };
+      }
+      // GIF: "GIF87a" or "GIF89a"
+      else if (
+        readLen >= 10 &&
+        buf[0] === 0x47 &&
+        buf[1] === 0x49 &&
+        buf[2] === 0x46
+      ) {
+        const w = buf.readUInt16LE(6);
+        const h = buf.readUInt16LE(8);
+        if (w > 0 && h > 0) dims = { width: w, height: h };
+      }
+      // JPEG: 0xFFD8 followed by markers
+      else if (readLen >= 4 && buf[0] === 0xff && buf[1] === 0xd8) {
+        let offset = 2;
+        while (offset + 9 < readLen) {
+          if (buf[offset] !== 0xff) {
+            offset += 1;
+            continue;
+          }
+          const marker = buf[offset + 1];
+          if (marker === 0xff) {
+            offset += 1;
+            continue;
+          }
+          if (marker === 0xd8 || marker === 0xd9 || (marker >= 0xd0 && marker <= 0xd7)) {
+            offset += 2;
+            continue;
+          }
+          const segLen = buf.readUInt16BE(offset + 2);
+          if (segLen < 2) break;
+          if (
+            (marker >= 0xc0 && marker <= 0xc3) ||
+            (marker >= 0xc5 && marker <= 0xc7) ||
+            (marker >= 0xc9 && marker <= 0xcb) ||
+            (marker >= 0xcd && marker <= 0xcf)
+          ) {
+            const h = buf.readUInt16BE(offset + 5);
+            const w = buf.readUInt16BE(offset + 7);
+            if (w > 0 && h > 0) dims = { width: w, height: h };
+            break;
+          }
+          offset += 2 + segLen;
+        }
+      }
+    }
+
+    IMAGE_DIM_CACHE.set(cacheKey, dims);
+    return dims;
+  } catch (_) {
+    return null;
+  }
+}
+
+function rewriteLocalImageUris(html, webview, baseDir, fallbackDir) {
+  return String(html || "").replace(
+    /(<img\b[^>]*?\bsrc=["'])([^"']+)(["'][^>]*>)/gi,
+    (full, prefix, src, suffix) => {
+      // Remove any decoding="async" so Chromium's tile manager never paints blank
+      // placeholders on scroll before async image decode completes.
+      const cleanPrefix = prefix.replace(/\s*\bdecoding=["'][^"']*["']/gi, "");
+      const cleanSuffix = suffix.replace(/\s*\bdecoding=["'][^"']*["']/gi, "");
+      const syncPrefix = cleanPrefix.replace(/^<img\b/i, '<img decoding="sync"');
+      if (/^(?:https?:|data:|vscode-webview-resource:)/i.test(src)) {
+        return `${syncPrefix}${src}${cleanSuffix}`;
+      }
+      const fsPath = resolveLocalAssetPath(src, baseDir, fallbackDir);
+      const dims = getImageDimensions(fsPath);
+      const hasDims = /\b(?:width|height)=["']/i.test(full);
+      const dimAttrs =
+        dims && !hasDims ? ` width="${dims.width}" height="${dims.height}"` : "";
+      const withDimsPrefix = dimAttrs
+        ? syncPrefix.replace(/^<img\b/i, `<img${dimAttrs}`)
+        : syncPrefix;
+      const webviewUri = webview.asWebviewUri(vscode.Uri.file(fsPath));
+      return `${withDimsPrefix}${webviewUri}${cleanSuffix}`;
+    }
+  );
+}
+
+function shortenHome(p) {
+  const home = os.homedir();
+  return p.startsWith(home) ? "~" + p.slice(home.length) : p;
+}
+
+function escapeHtml(s) {
+  return String(s || "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
+function buildWebviewHtml({
+  cssUri,
+  katexCssUri,
+  mermaidJsUri,
+  jsUri,
+  renderedHtml,
+  displayPath,
+  isBrainArtifact,
+  isSymlink,
+  isLightTheme,
+  syncScrollEnabled = true,
+  isSplitOpen = false,
+  initialLine = 0
+}) {
+  const brainBadge = isBrainArtifact
+    ? `<span class="agy-badge agy-badge-brain" title="Synced with Antigravity Brain">${isSymlink ? "Brain Shortcut" : "Brain Artifact"}</span>`
+    : "";
+  const nativeBtn = isBrainArtifact
+    ? `<button type="button" class="agy-btn" id="btn-native" title="Open in Native Antigravity Artifact Viewer">Native Viewer ↗</button>`
+    : "";
+  const themeClass = isLightTheme ? "vscode-light" : "vscode-dark";
+  const syncActiveClass = syncScrollEnabled ? " agy-btn-active" : "";
+  const splitActiveClass = isSplitOpen ? " agy-btn-active" : "";
+
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="stylesheet" href="${katexCssUri}" />
+  <link rel="stylesheet" href="${cssUri}?v=${ASSET_CACHE_VERSION}" />
+  <title>Antigravity Markdown Review</title>
+</head>
+<body class="agy-review-body ${themeClass}">
+  <div class="agy-toolbar">
+    <div class="agy-toolbar-left">
+      <span class="agy-badge">✦ Antigravity Review</span>
+      ${brainBadge}
+      <span class="agy-filepath" title="${escapeHtml(displayPath)}">${escapeHtml(displayPath)}</span>
+    </div>
+    <div class="agy-toolbar-actions">
+      ${nativeBtn}
+      <button type="button" class="agy-btn${syncActiveClass}" id="btn-sync" title="Toggle synchronized scrolling between raw Markdown and preview in split edit mode" aria-pressed="${syncScrollEnabled ? "true" : "false"}">⇅ Sync Scroll</button>
+      <button type="button" class="agy-btn" id="btn-copy" title="Copy raw Markdown">Copy MD</button>
+      <button type="button" class="agy-btn${splitActiveClass}" id="btn-split" title="Toggle raw Markdown editor beside this review" aria-pressed="${isSplitOpen ? "true" : "false"}">Split Edit</button>
+      <button type="button" class="agy-btn" id="btn-edit" title="Switch to raw Markdown editor">Edit Raw</button>
+    </div>
+  </div>
+  <main class="agy-review-container" id="agy-content">
+    ${renderedHtml}
+  </main>
+  <script src="${mermaidJsUri}"></script>
+  <script src="${jsUri}?v=${ASSET_CACHE_VERSION}"></script>
+  <script>
+    (function() {
+      const vscode = acquireVsCodeApi();
+      const btnEdit = document.getElementById("btn-edit");
+      const btnSplit = document.getElementById("btn-split");
+      const btnCopy = document.getElementById("btn-copy");
+      const btnNative = document.getElementById("btn-native");
+      const btnSync = document.getElementById("btn-sync");
+      const toolbarEl = document.querySelector(".agy-toolbar");
+      const contentEl = document.getElementById("agy-content");
+      const filepathEl = document.querySelector(".agy-filepath");
+
+      let syncScrollEnabled = ${Boolean(syncScrollEnabled)};
+      let isSplitOpen = ${Boolean(isSplitOpen)};
+      let programmaticScrollLockUntil = 0;
+      let userScrollActiveUntil = 0;
+      let cachedAnchors = null;
+      let lastTargetLine = ${typeof initialLine === "number" && !Number.isNaN(initialLine) ? initialLine : 0};
+      let lastEmittedIntLine = -1;
+
+      let smoothTargetY = null;
+      let smoothCurrentY = 0;
+      let smoothRafId = 0;
+      let lastSmoothFrameTime = 0;
+
+      function updateSyncButtonUi() {
+        if (!btnSync) return;
+        btnSync.classList.toggle("agy-btn-active", Boolean(syncScrollEnabled));
+        btnSync.setAttribute("aria-pressed", syncScrollEnabled ? "true" : "false");
+      }
+
+      function updateSplitButtonUi() {
+        if (!btnSplit) return;
+        btnSplit.classList.toggle("agy-btn-active", Boolean(isSplitOpen));
+        btnSplit.setAttribute("aria-pressed", isSplitOpen ? "true" : "false");
+      }
+
+      function getAnchorOffset() {
+        const th = toolbarEl ? toolbarEl.getBoundingClientRect().height : 0;
+        return th + 10;
+      }
+
+      function invalidateAnchors() {
+        cachedAnchors = null;
+      }
+
+      function buildScrollAnchors() {
+        if (cachedAnchors) return cachedAnchors;
+        const root = contentEl || document.body;
+        const rootRect = root.getBoundingClientRect();
+        const rootTop = rootRect.top + window.scrollY;
+        const rawAnchors = [{ line: 0, y: Math.max(0, rootTop), isSentinel: false }];
+
+        const codeLineEls = root.querySelectorAll(".code-line[data-line]");
+        codeLineEls.forEach((el) => {
+          if (!(el instanceof HTMLElement)) return;
+          if (el.closest(".agy-carousel-slide")) return;
+          const tag = el.tagName;
+          if (tag === "UL" || tag === "OL" || tag === "THEAD" || tag === "TBODY") return;
+          if (
+            (tag === "PRE" || tag === "CODE") &&
+            el.closest(".agy-code-block.code-line[data-line]")
+          ) {
+            return;
+          }
+
+          const line = parseFloat(el.getAttribute("data-line"));
+          if (Number.isNaN(line) || line < 0) return;
+
+          if (el.classList.contains("agy-scroll-sentinel")) {
+            const rect = el.getBoundingClientRect();
+            rawAnchors.push({ line, y: rect.top + window.scrollY, isSentinel: true });
+            return;
+          }
+
+          if (el.closest("details:not([open])")) return;
+          const style = window.getComputedStyle(el);
+          if (style.display === "none" || style.visibility === "hidden") return;
+          const rect = el.getBoundingClientRect();
+          if (rect.height === 0 && rect.width === 0) return;
+
+          const docTop = rect.top + window.scrollY;
+          const docBottom = docTop + rect.height;
+
+          if (el.classList.contains("agy-code-block")) {
+            const endLineAttr = parseFloat(el.getAttribute("data-line-end"));
+            const preEl = el.querySelector("pre");
+            const codeEl = el.querySelector("code");
+            const rawLines =
+              (((codeEl || preEl || el).textContent || "").replace(/\\n$/, "").match(/\\n/g) || [])
+                .length + 1;
+            const endLine =
+              !Number.isNaN(endLineAttr) && endLineAttr > line
+                ? endLineAttr
+                : line + rawLines + 1;
+            rawAnchors.push({ line, y: docTop, isSentinel: false });
+            if (preEl) {
+              const preRect = preEl.getBoundingClientRect();
+              const preStyle = window.getComputedStyle(preEl);
+              const padTop = parseFloat(preStyle.paddingTop) || 0;
+              const padBottom = parseFloat(preStyle.paddingBottom) || 0;
+              const codeTop = preRect.top + window.scrollY + padTop;
+              const codeBottom = Math.max(
+                codeTop + 1,
+                preRect.top + window.scrollY + preRect.height - padBottom
+              );
+              if (endLine > line + 1) {
+                rawAnchors.push({ line: line + 1, y: codeTop, isSentinel: false });
+              }
+              rawAnchors.push({ line: endLine, y: codeBottom, isSentinel: false });
+            } else {
+              rawAnchors.push({ line: endLine, y: docBottom, isSentinel: false });
+            }
+            return;
+          }
+
+          if (tag === "CODE" && el.parentElement && el.parentElement.tagName === "PRE") {
+            const preEl = el.parentElement;
+            const preRect = preEl.getBoundingClientRect();
+            const preStyle = window.getComputedStyle(preEl);
+            const padTop = parseFloat(preStyle.paddingTop) || 0;
+            const padBottom = parseFloat(preStyle.paddingBottom) || 0;
+            const codeTop = preRect.top + window.scrollY + padTop;
+            const codeBottom = Math.max(
+              codeTop + 1,
+              preRect.top + window.scrollY + preRect.height - padBottom
+            );
+            const rawLines =
+              ((el.textContent || "").replace(/\\n$/, "").match(/\\n/g) || []).length + 1;
+            const endLine = line + rawLines + 1;
+            rawAnchors.push({ line, y: preRect.top + window.scrollY, isSentinel: false });
+            if (endLine > line + 1) {
+              rawAnchors.push({ line: line + 1, y: codeTop, isSentinel: false });
+            }
+            rawAnchors.push({ line: endLine, y: codeBottom, isSentinel: false });
+            return;
+          }
+
+          if (
+            el.classList.contains("agy-mermaid-container") ||
+            el.classList.contains("agy-carousel")
+          ) {
+            const endLineAttr = parseFloat(el.getAttribute("data-line-end"));
+            rawAnchors.push({ line, y: docTop, isSentinel: false });
+            if (!Number.isNaN(endLineAttr) && endLineAttr > line) {
+              rawAnchors.push({ line: endLineAttr, y: docBottom, isSentinel: false });
+            }
+            return;
+          }
+
+          rawAnchors.push({ line, y: docTop, isSentinel: false });
+        });
+
+        rawAnchors.sort((a, b) => (a.line !== b.line ? a.line - b.line : a.y - b.y));
+
+        const anchors = [];
+        for (const pt of rawAnchors) {
+          if (anchors.length > 0 && Math.abs(pt.line - anchors[anchors.length - 1].line) < 1e-4) {
+            if (pt.isSentinel) {
+              anchors[anchors.length - 1].y = Math.max(anchors[anchors.length - 1].y, pt.y);
+            }
+            continue;
+          }
+          const clampedY =
+            anchors.length > 0 ? Math.max(anchors[anchors.length - 1].y, pt.y) : pt.y;
+          anchors.push({ line: pt.line, y: clampedY });
+        }
+
+        cachedAnchors = anchors;
+        return anchors;
+      }
+
+      function getScrollYForSourceLine(line) {
+        if (typeof line !== "number" || Number.isNaN(line) || line <= 0.05) {
+          return 0;
+        }
+        const anchors = buildScrollAnchors();
+        if (!anchors.length) return 0;
+
+        const anchorOffset = getAnchorOffset();
+        if (line <= anchors[0].line) {
+          return Math.max(0, anchors[0].y - anchorOffset);
+        }
+        const last = anchors[anchors.length - 1];
+        if (line >= last.line) {
+          return Math.max(0, last.y - anchorOffset);
+        }
+
+        let lo = 0;
+        let hi = anchors.length - 1;
+        while (lo + 1 < hi) {
+          const mid = (lo + hi) >> 1;
+          if (anchors[mid].line <= line) {
+            lo = mid;
+          } else {
+            hi = mid;
+          }
+        }
+
+        const a = anchors[lo];
+        const b = anchors[hi];
+        const spanL = b.line - a.line;
+        const t = spanL > 0 ? (line - a.line) / spanL : 0;
+        const targetDocY = a.y + t * (b.y - a.y);
+        return Math.max(0, targetDocY - anchorOffset);
+      }
+
+      function getSourceLineForScrollY(scrollY) {
+        if (scrollY <= 2) return 0;
+        const anchors = buildScrollAnchors();
+        if (!anchors.length) return 0;
+
+        const anchorDocY = scrollY + getAnchorOffset();
+        if (anchorDocY <= anchors[0].y) {
+          return anchors[0].line;
+        }
+        const last = anchors[anchors.length - 1];
+        if (anchorDocY >= last.y) {
+          return last.line;
+        }
+
+        let lo = 0;
+        let hi = anchors.length - 1;
+        while (lo + 1 < hi) {
+          const mid = (lo + hi) >> 1;
+          if (anchors[mid].y <= anchorDocY) {
+            lo = mid;
+          } else {
+            hi = mid;
+          }
+        }
+
+        while (lo > 0 && anchors[lo].y === anchors[lo - 1].y) {
+          lo--;
+        }
+        while (hi < anchors.length - 1 && anchors[hi].y === anchors[lo].y) {
+          hi++;
+        }
+
+        const a = anchors[lo];
+        const b = anchors[hi];
+        const spanY = b.y - a.y;
+        const t = spanY > 0 ? Math.min(1, Math.max(0, (anchorDocY - a.y) / spanY)) : 0;
+        return a.line + t * (b.line - a.line);
+      }
+
+      function cancelProgrammaticSmoothScroll() {
+        if (smoothRafId) {
+          if (typeof cancelAnimationFrame === "function") {
+            cancelAnimationFrame(smoothRafId);
+          }
+          smoothRafId = 0;
+        }
+        smoothTargetY = null;
+        lastSmoothFrameTime = 0;
+      }
+
+      function stepSmoothScroll(now) {
+        if (smoothTargetY === null) {
+          smoothRafId = 0;
+          return;
+        }
+        const ts = typeof now === "number" ? now : performance.now();
+        const dt = lastSmoothFrameTime ? Math.min(64, Math.max(4, ts - lastSmoothFrameTime)) : 16;
+        lastSmoothFrameTime = ts;
+
+        const diff = smoothTargetY - smoothCurrentY;
+        if (Math.abs(diff) < 0.75) {
+          programmaticScrollLockUntil = performance.now() + 180;
+          window.scrollTo(window.scrollX, Math.round(smoothTargetY));
+          smoothCurrentY = smoothTargetY;
+          smoothTargetY = null;
+          smoothRafId = 0;
+          lastSmoothFrameTime = 0;
+          return;
+        }
+
+        const alpha = 1 - Math.exp(-dt / 40);
+        smoothCurrentY += diff * alpha;
+        programmaticScrollLockUntil = performance.now() + 180;
+        window.scrollTo(window.scrollX, smoothCurrentY);
+        smoothRafId = requestAnimationFrame(stepSmoothScroll);
+      }
+
+      function scrollToSourceLine(line, instant = false) {
+        if (typeof line !== "number" || Number.isNaN(line)) return;
+        lastTargetLine = line;
+        lastEmittedIntLine = Math.max(0, Math.round(line));
+        const targetY = getScrollYForSourceLine(line);
+        if (instant || Math.abs(targetY - window.scrollY) > 2200) {
+          cancelProgrammaticSmoothScroll();
+          smoothCurrentY = targetY;
+          programmaticScrollLockUntil = performance.now() + 200;
+          window.scrollTo(window.scrollX, targetY);
+          return;
+        }
+        smoothTargetY = targetY;
+        if (!smoothRafId) {
+          smoothCurrentY = window.scrollY;
+          lastSmoothFrameTime = 0;
+          smoothRafId = requestAnimationFrame(stepSmoothScroll);
+        }
+      }
+
+      function markUserScrollIntent() {
+        cancelProgrammaticSmoothScroll();
+        programmaticScrollLockUntil = 0;
+        userScrollActiveUntil = performance.now() + 450;
+      }
+
+      window.addEventListener("wheel", markUserScrollIntent, { passive: true });
+      window.addEventListener("touchstart", markUserScrollIntent, { passive: true });
+      window.addEventListener("touchmove", markUserScrollIntent, { passive: true });
+      window.addEventListener("pointerdown", markUserScrollIntent, { passive: true });
+      window.addEventListener(
+        "keydown",
+        (e) => {
+          if (
+            e &&
+            (e.key === "ArrowDown" ||
+              e.key === "ArrowUp" ||
+              e.key === "PageDown" ||
+              e.key === "PageUp" ||
+              e.key === "Home" ||
+              e.key === "End" ||
+              e.key === " ")
+          ) {
+            markUserScrollIntent();
+          }
+        },
+        { passive: true }
+      );
+
+      if (btnEdit) {
+        btnEdit.addEventListener("click", () => {
+          const line = getSourceLineForScrollY(window.scrollY);
+          vscode.postMessage({ type: "editSource", beside: false, line });
+        });
+      }
+      if (btnSplit) {
+        btnSplit.addEventListener("click", () => {
+          const line = getSourceLineForScrollY(window.scrollY);
+          vscode.postMessage({ type: "toggleSplitEdit", line });
+        });
+      }
+      if (btnSync) {
+        btnSync.addEventListener("click", () => {
+          syncScrollEnabled = !syncScrollEnabled;
+          updateSyncButtonUi();
+          vscode.postMessage({ type: "toggleSyncScroll", enabled: syncScrollEnabled });
+        });
+      }
+      if (btnCopy) btnCopy.addEventListener("click", () => vscode.postMessage({ type: "copyRaw" }));
+      if (btnNative) btnNative.addEventListener("click", () => vscode.postMessage({ type: "openNativeArtifact" }));
+
+      function applyThemeClass(isLight) {
+        if (!document.body) return;
+        document.body.classList.toggle("vscode-light", Boolean(isLight));
+        document.body.classList.toggle("vscode-dark", !isLight);
+      }
+
+      let scrollEmitPending = false;
+      function emitScrollLine() {
+        scrollEmitPending = false;
+        if (!syncScrollEnabled) return;
+        if (smoothRafId || performance.now() < programmaticScrollLockUntil) return;
+        const line = getSourceLineForScrollY(window.scrollY);
+        if (typeof line === "number" && !Number.isNaN(line)) {
+          lastTargetLine = line;
+          const intLine = Math.max(0, Math.round(line));
+          if (intLine !== lastEmittedIntLine) {
+            lastEmittedIntLine = intLine;
+            vscode.postMessage({ type: "revealLine", line });
+          }
+        }
+      }
+
+      window.addEventListener(
+        "scroll",
+        () => {
+          if (!syncScrollEnabled) return;
+          if (smoothRafId || performance.now() < programmaticScrollLockUntil) return;
+          userScrollActiveUntil = performance.now() + 450;
+          if (scrollEmitPending) return;
+          scrollEmitPending = true;
+          requestAnimationFrame(emitScrollLine);
+        },
+        { passive: true }
+      );
+
+      window.addEventListener("resize", () => {
+        programmaticScrollLockUntil = performance.now() + 200;
+        invalidateAnchors();
+      });
+
+      window.addEventListener("agy.markdown.layoutChanged", () => {
+        invalidateAnchors();
+      });
+
+      if (lastTargetLine > 0) {
+        const alignInitial = () => {
+          invalidateAnchors();
+          scrollToSourceLine(lastTargetLine, true);
+        };
+        if (document.readyState === "loading") {
+          document.addEventListener("DOMContentLoaded", () => {
+            requestAnimationFrame(alignInitial);
+          });
+        } else {
+          requestAnimationFrame(alignInitial);
+        }
+      }
+
+      window.addEventListener("message", (event) => {
+        const msg = event.data;
+        if (!msg || !msg.type) return;
+        if (msg.type === "scrollToLine" && typeof msg.line === "number") {
+          if (!syncScrollEnabled) return;
+          if (!msg.instant && performance.now() < userScrollActiveUntil) return;
+          scrollToSourceLine(msg.line, Boolean(msg.instant));
+          return;
+        }
+        if (msg.type === "updateSyncScroll") {
+          syncScrollEnabled = Boolean(msg.enabled);
+          updateSyncButtonUi();
+          return;
+        }
+        if (msg.type === "updateSplitState") {
+          isSplitOpen = Boolean(msg.isOpen);
+          updateSplitButtonUi();
+          return;
+        }
+        if (msg.type === "updateTheme") {
+          applyThemeClass(msg.isLightTheme);
+          window.dispatchEvent(new CustomEvent("vscode.markdown.updateContent"));
+          return;
+        }
+        if (msg.type === "updateContent") {
+          const prevScrollY = window.scrollY;
+          const prevScrollX = window.scrollX;
+          cancelProgrammaticSmoothScroll();
+          programmaticScrollLockUntil = performance.now() + 260;
+          applyThemeClass(msg.isLightTheme);
+          if (filepathEl && typeof msg.displayPath === "string") {
+            filepathEl.textContent = msg.displayPath;
+            filepathEl.setAttribute("title", msg.displayPath);
+          }
+          if (contentEl && typeof msg.renderedHtml === "string") {
+            contentEl.innerHTML = msg.renderedHtml;
+          }
+          invalidateAnchors();
+          window.dispatchEvent(new CustomEvent("vscode.markdown.updateContent"));
+          window.scrollTo(prevScrollX, prevScrollY);
+          requestAnimationFrame(() => {
+            programmaticScrollLockUntil = performance.now() + 200;
+            window.scrollTo(prevScrollX, prevScrollY);
+            invalidateAnchors();
+          });
+        }
+      });
+
+      document.addEventListener("click", (e) => {
+        const sel = window.getSelection ? window.getSelection() : null;
+        if (sel && !sel.isCollapsed && String(sel.toString()).trim().length > 0) {
+          return;
+        }
+        const a = e.target && e.target.closest ? e.target.closest("a[href]") : null;
+        if (!a) return;
+        const href = a.getAttribute("href") || "";
+        if (!href) return;
+        if (href.startsWith("#")) {
+          const rawId = href.slice(1);
+          const target =
+            document.getElementById(rawId) ||
+            document.getElementById(decodeURIComponent(rawId));
+          if (target) {
+            e.preventDefault();
+            target.scrollIntoView({ behavior: "smooth" });
+          }
+          return;
+        }
+        e.preventDefault();
+        vscode.postMessage({ type: "openLink", href });
+      });
+    })();
+  </script>
+</body>
+</html>`;
+}
+
+function syncMarkdownPreviewEnhanced(extensionPath) {
+  try {
+    const crossnoteDir = path.join(os.homedir(), ".local", "state", "crossnote");
+    fs.mkdirSync(crossnoteDir, { recursive: true });
+
+    const cssSource = fs.readFileSync(
+      path.join(extensionPath, "media", "antigravity-markdown.css"),
+      "utf8"
+    );
+
+    const styleLessPath = path.join(crossnoteDir, "style.less");
+    const beginMarker = "/* BEGIN ANTIGRAVITY MARKDOWN STYLE */";
+    const endMarker = "/* END ANTIGRAVITY MARKDOWN STYLE */";
+    const styleBlock = `${beginMarker}\n${cssSource}\n${endMarker}`;
+
+    let existingStyle = "";
+    if (fs.existsSync(styleLessPath)) {
+      existingStyle = fs.readFileSync(styleLessPath, "utf8");
+    }
+    if (existingStyle.includes(beginMarker) && existingStyle.includes(endMarker)) {
+      const startIdx = existingStyle.indexOf(beginMarker);
+      const endIdx = existingStyle.indexOf(endMarker) + endMarker.length;
+      existingStyle = existingStyle.slice(0, startIdx) + styleBlock + existingStyle.slice(endIdx);
+    } else {
+      existingStyle = existingStyle.trimEnd() + "\n\n" + styleBlock + "\n";
+    }
+    fs.writeFileSync(styleLessPath, existingStyle, "utf8");
+
+    // Configure Crossnote parser.js so [!NOTE]/[!TIP]/[!IMPORTANT]/[!WARNING]/[!CAUTION]
+    // and ````carousel blocks render in Markdown Preview Enhanced without corrupting KaTeX matrices.
+    const parserJsPath = path.join(crossnoteDir, "parser.js");
+    const parserCode = `({
+  // Managed by Antigravity Markdown Review (iamqazolp.agy-markdown-review)
+  onWillParseMarkdown: async function(markdown) {
+    return String(markdown || "").replace(
+      /(\`{3,})carousel[^\\n]*\\n([\\s\\S]*?)\\n\\1(?:\\s*$|\\s*\\n)/gm,
+      function(fullMatch, _fence, inner) {
+        const slides = inner.split(/<!--\\s*slide\\s*-->/i).map(s => s.trim()).filter(Boolean);
+        if (!slides.length) return fullMatch;
+        const navJs = "const c=this.closest('.agy-carousel');const s=Array.from(c.querySelectorAll('.agy-carousel-slide'));let i=s.findIndex(x=>x.classList.contains('active'));if(i<0)i=0;i=(i+DIR+s.length)%s.length;s.forEach((el,idx)=>el.classList.toggle('active',idx===i));const cnt=c.querySelector('.agy-carousel-counter');if(cnt)cnt.textContent='Slide '+(i+1)+' of '+s.length;";
+        const prevAttr = navJs.replace("DIR", "-1");
+        const nextAttr = navJs.replace("DIR", "1");
+        return '<div class="agy-carousel">\\n' +
+          '<div class="agy-carousel-header">' +
+          '<span class="agy-carousel-counter">Slide 1 of ' + slides.length + '</span>' +
+          '<div class="agy-carousel-controls">' +
+          '<button type="button" class="agy-btn agy-carousel-prev" onclick="' + prevAttr + '">← Prev</button>' +
+          '<button type="button" class="agy-btn agy-carousel-next" onclick="' + nextAttr + '">Next →</button>' +
+          '</div></div>\\n\\n' +
+          slides.map((s, i) => '<div class="agy-carousel-slide' + (i === 0 ? ' active' : '') + '">\\n\\n' + s + '\\n\\n</div>').join("\\n\\n") +
+          '\\n\\n</div>\\n\\n';
+      }
+    );
+  },
+
+  onDidParseMarkdown: async function(html) {
+    const icons = ${JSON.stringify(ALERT_ICONS)};
+    const labels = ${JSON.stringify(ALERT_LABELS)};
+    return String(html || "").replace(
+      /<blockquote>\\s*<p>\\[!(NOTE|TIP|IMPORTANT|WARNING|CAUTION)\\](?:\\s*<br\\s*\\/?>|\\s*\\n|\\s+)?([\\s\\S]*?)<\\/blockquote>/gi,
+      function(_, rawType, rest) {
+        const t = rawType.toLowerCase();
+        const body = rest.trim().startsWith("</p>") ? rest.trim().slice(4) : "<p>" + rest;
+        return '<div class="markdown-alert markdown-alert-' + t + '">' +
+          '<p class="markdown-alert-title">' + (icons[t] || "") + (labels[t] || rawType) + '</p>' +
+          body + '</div>';
+      }
+    );
+  },
+})
+`;
+    fs.writeFileSync(parserJsPath, parserCode, "utf8");
+  } catch (_) {
+    // Ignore errors if crossnote dir is not writable
+  }
+}
+
+function extendMarkdownItWithAntigravity(md) {
+  md.core.ruler.push("agy_source_line_range", (state) => {
+    for (const token of state.tokens) {
+      if (token.map && token.type !== "inline") {
+        if (!token.attrGet("data-line")) {
+          token.attrSet("data-line", String(token.map[0]));
+          token.attrJoin("class", "code-line");
+        }
+        if (typeof token.map[1] === "number") {
+          token.attrSet("data-line-end", String(token.map[1]));
+        }
+      }
+    }
+  });
+
+  const defaultFence =
+    md.renderer.rules.fence ||
+    function (tokens, idx, options, env, self) {
+      return self.renderToken(tokens, idx, options);
+    };
+
+  md.renderer.rules.fence = function (tokens, idx, options, env, self) {
+    const token = tokens[idx];
+    const info = (token.info || "").trim().toLowerCase();
+    if (info === "carousel") {
+      const slides = (token.content || "")
+        .split(/<!--\s*slide\s*-->/i)
+        .map((s) => s.trim())
+        .filter(Boolean);
+      if (slides.length) {
+        const lineAttrs =
+          token.map && token.map.length >= 2
+            ? ` data-line="${token.map[0]}" data-line-end="${token.map[1]}"`
+            : "";
+        const slidesHtml = slides
+          .map(
+            (s, i) =>
+              `<div class="agy-carousel-slide${i === 0 ? " active" : ""}">${md.render(s)}</div>`
+          )
+          .join("");
+        return (
+          `<div class="agy-carousel code-line"${lineAttrs}>` +
+          `<div class="agy-carousel-header">` +
+          `<span class="agy-carousel-counter">Slide 1 of ${slides.length}</span>` +
+          `<div class="agy-carousel-controls">` +
+          `<button type="button" class="agy-btn agy-carousel-prev">← Prev</button>` +
+          `<button type="button" class="agy-btn agy-carousel-next">Next →</button>` +
+          `</div>` +
+          `</div>` +
+          `${slidesHtml}` +
+          `</div>`
+        );
+      }
+    }
+    return defaultFence(tokens, idx, options, env, self);
+  };
+
+  return md;
+}
+
+function activate(context) {
+  const provider = new AntigravityMarkdownReviewProvider(context);
+
+  if (vscode.window.activeTextEditor) {
+    recordEditorPosition(vscode.window.activeTextEditor);
+  }
+
+  context.subscriptions.push(
+    vscode.window.onDidChangeTextEditorVisibleRanges((e) => {
+      if (e && e.textEditor) {
+        recordEditorPosition(e.textEditor);
+      }
+    }),
+    vscode.window.onDidChangeActiveTextEditor((ed) => {
+      if (ed) {
+        recordEditorPosition(ed);
+      }
+    })
+  );
+
+  context.subscriptions.push(
+    vscode.window.registerCustomEditorProvider("antigravity.markdownReview", provider, {
+      webviewOptions: { retainContextWhenHidden: true },
+      supportsMultipleEditorsPerDocument: true
+    })
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand("agyMarkdown.openReview", async (uri) => {
+      if (vscode.window.activeTextEditor) {
+        recordEditorPosition(vscode.window.activeTextEditor);
+      }
+      const targetUri =
+        uri instanceof vscode.Uri
+          ? uri
+          : vscode.window.activeTextEditor
+          ? vscode.window.activeTextEditor.document.uri
+          : null;
+      if (!targetUri) return;
+      await vscode.commands.executeCommand("vscode.openWith", targetUri, "antigravity.markdownReview");
+    }),
+    vscode.commands.registerCommand("agyMarkdown.openReviewBeside", async (uri) => {
+      if (vscode.window.activeTextEditor) {
+        recordEditorPosition(vscode.window.activeTextEditor);
+      }
+      const targetUri =
+        uri instanceof vscode.Uri
+          ? uri
+          : vscode.window.activeTextEditor
+          ? vscode.window.activeTextEditor.document.uri
+          : null;
+      if (!targetUri) return;
+      await vscode.commands.executeCommand(
+        "vscode.openWith",
+        targetUri,
+        "antigravity.markdownReview",
+        vscode.ViewColumn.Beside
+      );
+    }),
+    vscode.commands.registerCommand("agyMarkdown.editSource", async (uri) => {
+      let targetUri = uri instanceof vscode.Uri ? uri : null;
+      if (!targetUri && vscode.window.tabGroups.activeTabGroup.activeTab) {
+        const input = vscode.window.tabGroups.activeTabGroup.activeTab.input;
+        if (input && input.uri) {
+          targetUri = input.uri;
+        }
+      }
+      if (!targetUri) return;
+      const info = resolveRealFileInfo(targetUri);
+      const savedLine =
+        lastEditorLineByPath.get(info.realPath) ?? lastEditorLineByPath.get(info.fsPath);
+      await vscode.commands.executeCommand("vscode.openWith", targetUri, "default");
+      if (typeof savedLine === "number" && !Number.isNaN(savedLine) && savedLine > 0) {
+        const applyReveal = () => {
+          const editors = findMatchingVisibleEditors(info);
+          for (const ed of editors) {
+            revealEditorAtLine(ed, savedLine);
+          }
+        };
+        applyReveal();
+        setTimeout(applyReveal, 60);
+      }
+    }),
+    vscode.commands.registerCommand("agyMarkdown.openNativeArtifactViewer", async (uri) => {
+      const targetUri =
+        uri instanceof vscode.Uri
+          ? uri
+          : vscode.window.activeTextEditor
+          ? vscode.window.activeTextEditor.document.uri
+          : null;
+      if (!targetUri) return;
+      await openInNativeArtifactViewer(resolveRealFileInfo(targetUri));
+    }),
+    vscode.commands.registerCommand("agyMarkdown.syncMpeTheme", () => {
+      syncMarkdownPreviewEnhanced(context.extensionPath);
+      vscode.window.showInformationMessage(
+        "Antigravity Markdown style synced to Markdown Preview Enhanced."
+      );
+    }),
+    vscode.commands.registerCommand("agyMarkdown.toggleSyncScroll", async () => {
+      const cfg = vscode.workspace.getConfiguration("agyMarkdown");
+      const current = cfg.get("syncScroll", true);
+      await cfg.update("syncScroll", !current, vscode.ConfigurationTarget.Global);
+      vscode.window.setStatusBarMessage(
+        `Antigravity: Synchronized scrolling ${!current ? "enabled" : "disabled"}`,
+        2500
+      );
+    })
+  );
+
+  const cfg = vscode.workspace.getConfiguration("agyMarkdown");
+  if (cfg.get("syncMarkdownPreviewEnhanced", true)) {
+    syncMarkdownPreviewEnhanced(context.extensionPath);
+  }
+
+  return {
+    extendMarkdownIt(md) {
+      return extendMarkdownItWithAntigravity(md);
+    }
+  };
+}
+
+function deactivate() {}
+
+module.exports = {
+  activate,
+  deactivate
+};
