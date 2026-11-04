@@ -1,16 +1,8 @@
 # Antigravity Markdown Review
 
-<p align="center">
-  <img src="media/icon.png" alt="Antigravity Markdown Review Logo" width="112" />
-</p>
+**Google Antigravity's native Artifact Viewer styling, theme-adaptive syntax highlighting, interactive carousels, and 60fps bidirectional scroll sync for VS Code, Cursor, Windsurf, and Antigravity IDE.**
 
-<p align="center">
-  <strong>Google Antigravity's native Artifact Viewer styling, Okaidia syntax highlighting, interactive carousels, and 60fps bidirectional scroll sync for VS Code, Cursor, Windsurf, and Antigravity IDE.</strong>
-</p>
-
-<p align="center">
-  <img src="media/screenshots/demo-showcase.gif" alt="Antigravity Markdown Review Showcase" width="100%" />
-</p>
+![Antigravity Markdown Review Showcase](media/screenshots/demo-showcase.gif)
 
 ---
 

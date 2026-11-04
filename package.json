@@ -2,7 +2,7 @@
   "name": "agy-markdown-review",
   "displayName": "Antigravity Markdown Review",
   "description": "Applies Google Antigravity's Artifact Viewer style (callouts, tables, code blocks, carousels, and file links) to every Markdown review and preview in VS Code.",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "publisher": "iamqazolp",
   "license": "MIT",
   "icon": "media/icon.png",
@@ -40,8 +40,8 @@
     "carousel"
   ],
   "scripts": {
-    "package": "npx --yes @vscode/vsce package",
-    "publish": "npx --yes @vscode/vsce publish"
+    "package": "npx --yes @vscode/vsce package --baseImagesUrl https://raw.githubusercontent.com/iamqazolp/antigravity-markdown-preview/main --baseContentUrl https://github.com/iamqazolp/antigravity-markdown-preview/blob/main",
+    "publish": "npx --yes @vscode/vsce publish --baseImagesUrl https://raw.githubusercontent.com/iamqazolp/antigravity-markdown-preview/main --baseContentUrl https://github.com/iamqazolp/antigravity-markdown-preview/blob/main"
   },
   "activationEvents": [
     "onStartupFinished",

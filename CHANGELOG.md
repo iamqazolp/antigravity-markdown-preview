@@ -2,6 +2,11 @@
 
 All notable changes to the **Antigravity Markdown Review** (`agy-markdown-review`) extension will be documented in this file.
 
+## [1.0.1] - 2026-11-05
+
+### Fixed
+- Use direct `raw.githubusercontent.com` image URLs (`--baseImagesUrl`) and standard Markdown image syntax in `README.md` so all screenshots and animated GIFs render immediately on the VS Code Marketplace and Open VSX pages.
+
 ## [1.0.0] - 2026-11-05
 
 ### Added
