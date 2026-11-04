@@ -1,0 +1,12 @@
+.vscode/**
+.git/**
+.gitignore
+.jj/**
+.local-notes/**
+.DS_Store
+__pycache__/**
+*.pyc
+*.vsix
+*.svg
+install.py
+node_modules/**

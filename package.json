@@ -5,10 +5,20 @@
   "version": "1.0.0",
   "publisher": "iamqazolp",
   "license": "MIT",
+  "icon": "media/icon.png",
+  "galleryBanner": {
+    "color": "#f4f6ff",
+    "theme": "light"
+  },
+  "homepage": "https://github.com/iamqazolp/antigravity-markdown-preview#readme",
   "repository": {
     "type": "git",
     "url": "https://github.com/iamqazolp/antigravity-markdown-preview.git"
   },
+  "bugs": {
+    "url": "https://github.com/iamqazolp/antigravity-markdown-preview/issues"
+  },
+  "qna": "marketplace",
   "engines": {
     "vscode": "^1.75.0"
   },
@@ -22,8 +32,17 @@
     "markdown",
     "preview",
     "review",
-    "artifact"
+    "artifact",
+    "syntax-highlighting",
+    "mermaid",
+    "katex",
+    "callout",
+    "carousel"
   ],
+  "scripts": {
+    "package": "npx --yes @vscode/vsce package",
+    "publish": "npx --yes @vscode/vsce publish"
+  },
   "activationEvents": [
     "onStartupFinished",
     "onLanguage:markdown",
@@ -124,6 +143,11 @@
           "type": "boolean",
           "default": false,
           "description": "Display line numbers inside fenced code blocks by default (can also be enabled per block with `showLineNumbers` in the fence info)."
+        },
+        "agyMarkdown.useThemePalette": {
+          "type": "boolean",
+          "default": true,
+          "description": "Dynamically integrate the active VS Code color theme's workbench surfaces (sidebar/cell tints) and editor syntax token colors into Markdown Review and previews."
         },
         "agyMarkdown.syncMarkdownPreviewEnhanced": {
           "type": "boolean",

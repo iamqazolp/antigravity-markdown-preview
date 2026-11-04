@@ -14,7 +14,7 @@ from pathlib import Path
 EXT_ID = "iamqazolp.agy-markdown-review"
 EXT_VERSION = "1.0.0"
 EXT_DIR_NAME = f"{EXT_ID}-{EXT_VERSION}"
-COPY_ITEMS = ("extension.js", "package.json", "media", "README.md")
+COPY_ITEMS = ("extension.js", "package.json", "media", "README.md", "CHANGELOG.md", "LICENSE")
 
 
 def install_extension(repo_root: Path) -> list[Path]:

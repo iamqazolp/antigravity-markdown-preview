@@ -16,12 +16,22 @@ const ALERT_ICONS = {
 };
 
 const ALERT_LABELS = {
-  note: "Note",
-  tip: "Tip",
-  important: "Important",
-  warning: "Warning",
-  caution: "Caution"
+  note: "NOTE",
+  tip: "TIP",
+  important: "IMPORTANT",
+  warning: "WARNING",
+  caution: "CAUTION"
 };
+
+function formatDocumentTitle(filePath) {
+  const base = path.basename(String(filePath || "")).replace(/\.(?:md|markdown|mdx)$/i, "");
+  if (!base) return "Markdown Review";
+  return base
+    .split(/[_-\s]+/)
+    .filter(Boolean)
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+    .join(" ");
+}
 
 function resolveRealFileInfo(uri) {
   const fsPath = uri.fsPath;
@@ -159,10 +169,10 @@ async function renderMarkdownWithCarousels(markdownText, renderFn) {
   const totalLines = srcText.split(/\r?\n/).length;
   const carousels = [];
   const withPlaceholders = srcText.replace(
-    /(`{3,})carousel[^\n]*\n([\s\S]*?)\n\1(?:\s*$|\s*\n)/gm,
+    /^[ \t]*(`{3,})carousel[ \t]*\r?\n([\s\S]*?)\r?\n[ \t]*\1[ \t]*(?:$|\r?\n)/gm,
     (fullMatch, _fence, inner, offset) => {
       const slides = inner
-        .split(/<!--\s*slide\s*-->/i)
+        .split(/(?:^|\r?\n)[ \t]*<!--\s*slide\s*-->[ \t]*(?=\r?\n|$)/i)
         .map((s) => s.trim())
         .filter(Boolean);
       if (!slides.length) return fullMatch;
@@ -221,8 +231,7 @@ function postprocessAlertsInHtml(html, fenceMetaByLine) {
     /<blockquote\b([^>]*)>\s*<p\b([^>]*)>\[!(NOTE|TIP|IMPORTANT|WARNING|CAUTION)\](?:\s*<br\s*\/?>|\s*\n|\s+)?([\s\S]*?)<\/blockquote>/gi,
     (_, bqAttrs, pAttrs, rawType, innerRest) => {
       const type = rawType.toLowerCase();
-      const icon = ALERT_ICONS[type] || "";
-      const label = ALERT_LABELS[type] || rawType;
+      const label = ALERT_LABELS[type] || rawType.toUpperCase();
       const combinedAttrs = `${bqAttrs || ""} ${pAttrs || ""}`;
       const dlMatch = combinedAttrs.match(/\bdata-line=["'](\d+)["']/i);
       const dleMatch = combinedAttrs.match(/\bdata-line-end=["'](\d+)["']/i);
@@ -233,10 +242,22 @@ function postprocessAlertsInHtml(html, fenceMetaByLine) {
         : `<p>${innerRest}`;
       return (
         `<div class="markdown-alert markdown-alert-${type} code-line"${dlAttr}${dleAttr}>` +
-        `<p class="markdown-alert-title">${icon}${label}</p>` +
+        `<p class="markdown-alert-title">${label}</p>` +
         `${body}` +
         `</div>`
       );
+    }
+  );
+
+  // Convert any [label](file://...) or [label](conversation://...) rejected by markdown-it's default validateLink
+  out = out.replace(
+    /(<pre\b[\s\S]*?<\/pre>)|\[(<code\b[^>]*>[^<]*<\/code>|[^\[\]\n<]+)\]\((?:<a\b[^>]*href=["']((?:file|conversation):\/\/[^"']+)["'][^>]*>[\s\S]*?<\/a>|((?:file|conversation):\/\/[^)\s<"']+))\)/gi,
+    (full, preBlock, labelHtml, linkedHref, rawHref) => {
+      if (preBlock) return preBlock;
+      const href = (linkedHref || rawHref || "").trim();
+      if (!href) return full;
+      const cls = /^conversation:\/\//i.test(href) ? "agy-conv-link" : "agy-file-link";
+      return `<a href="${href}" class="${cls}">${labelHtml}</a>`;
     }
   );
 
@@ -610,8 +631,57 @@ function enrichPlainSegment(escapedText, lang) {
   return out;
 }
 
+function highlightMarkdownCode(rawCode) {
+  const src = String(rawCode || "");
+  const nestedFenceRe = /^([ \t]*(`{3,}|~{3,}))([^\n]*)\n([\s\S]*?)(^\1[ \t]*$)/gm;
+  let out = "";
+  let last = 0;
+  let m;
+
+  const highlightMarkdownLines = (segment) => {
+    return segment
+      .split("\n")
+      .map((line) => {
+        if (/^[ \t]*#{1,6}[ \t]+/.test(line)) {
+          return `<span class="hljs-keyword">${escapeHtml(line)}</span>`;
+        }
+        if (/^[ \t]*>\s*\[!(?:NOTE|TIP|IMPORTANT|WARNING|CAUTION)\]/i.test(line)) {
+          return `<span class="hljs-meta">${escapeHtml(line)}</span>`;
+        }
+        if (/^[ \t]*>/.test(line)) {
+          return `<span class="hljs-comment">${escapeHtml(line)}</span>`;
+        }
+        return escapeHtml(line)
+          .replace(/(`+[^`\n]+`+)/g, '<span class="hljs-string">$1</span>')
+          .replace(/(\*\*[^*\n]+\*\*)/g, '<span class="hljs-strong">$1</span>')
+          .replace(/(\[[^\]\n]+\]\([^)\n]+\))/g, '<span class="hljs-attr">$1</span>');
+      })
+      .join("\n");
+  };
+
+  while ((m = nestedFenceRe.exec(src)) !== null) {
+    out += highlightMarkdownLines(src.slice(last, m.index));
+    const openFence = m[1];
+    const infoStr = m[3] || "";
+    const body = m[4] || "";
+    const closeFence = m[5];
+    const parsed = parseCodeFenceInfo(infoStr.trim(), body);
+    const subLang = parsed.highlightLang || parsed.displayLang || "python";
+    const openLineHtml = `<span class="hljs-meta">${escapeHtml(openFence + infoStr)}</span>`;
+    const bodyHtml = highlightFallbackPlainCode(body.replace(/\n$/, ""), subLang);
+    const closeLineHtml = `<span class="hljs-meta">${escapeHtml(closeFence)}</span>`;
+    out += `${openLineHtml}\n${bodyHtml}\n${closeLineHtml}`;
+    last = nestedFenceRe.lastIndex;
+  }
+  out += highlightMarkdownLines(src.slice(last));
+  return out;
+}
+
 function highlightFallbackPlainCode(rawCode, lang) {
   const raw = String(rawCode || "");
+  if (lang === "markdown" || lang === "md") {
+    return highlightMarkdownCode(raw);
+  }
   if (lang === "diff") {
     return raw
       .split("\n")
@@ -779,7 +849,10 @@ function enrichCodeBlockHtml(innerHtml, rawLang, hlLinesSpec = "", showLineNumbe
   let html = String(innerHtml || "");
 
   const hasSpans = /\bclass=["'][^"']*\b(?:hljs-|token\b)/i.test(html);
-  if (!hasSpans) {
+  if (lang === "markdown" || lang === "md" || rawLang === "markdown" || rawLang === "md") {
+    const rawText = decodeHtmlEntities(html.replace(/<[^>]+>/g, ""));
+    html = highlightMarkdownCode(rawText);
+  } else if (!hasSpans) {
     const rawText = decodeHtmlEntities(html.replace(/<[^>]+>/g, ""));
     const effectiveLang = lang || detectUntaggedCodeLang(rawText);
     html = highlightFallbackPlainCode(rawText, effectiveLang);
@@ -939,9 +1012,12 @@ class AntigravityMarkdownReviewProvider {
     };
 
     let lastRawText = null;
+    let lastRenderedHtml = null;
     let lastIsLightTheme = null;
+    let lastThemeCss = null;
     let isWebviewInitialized = false;
     let renderTimer = null;
+    let wasPanelVisible = Boolean(webviewPanel.visible);
 
     let syncScrollEnabled = vscode.workspace
       .getConfiguration("agyMarkdown")
@@ -980,12 +1056,25 @@ class AntigravityMarkdownReviewProvider {
       const isLightTheme =
         themeKind === vscode.ColorThemeKind.Light ||
         themeKind === vscode.ColorThemeKind.HighContrastLight;
+      const themeCss = buildThemeOverrideCss();
+
+      if (
+        !force &&
+        isWebviewInitialized &&
+        !rawText.trim() &&
+        lastRawText &&
+        lastRawText.trim().length > 0
+      ) {
+        scheduleRender(80);
+        return;
+      }
 
       if (
         !force &&
         isWebviewInitialized &&
         rawText === lastRawText &&
-        isLightTheme === lastIsLightTheme
+        isLightTheme === lastIsLightTheme &&
+        themeCss === lastThemeCss
       ) {
         return;
       }
@@ -993,15 +1082,18 @@ class AntigravityMarkdownReviewProvider {
       const contentChanged = !isWebviewInitialized || rawText !== lastRawText;
       lastRawText = rawText;
       lastIsLightTheme = isLightTheme;
+      lastThemeCss = themeCss;
 
       const displayPath = info.isSymlink
         ? `${path.basename(info.fsPath)} → ${shortenHome(info.realPath)}`
         : shortenHome(info.fsPath);
+      const docTitle = formatDocumentTitle(info.fsPath);
 
       if (isWebviewInitialized && !force && !contentChanged) {
         await webview.postMessage({
           type: "updateTheme",
-          isLightTheme
+          isLightTheme,
+          themeCss
         });
         return;
       }
@@ -1023,14 +1115,22 @@ class AntigravityMarkdownReviewProvider {
       );
 
       if (isWebviewInitialized && !force) {
+        if (renderedHtml === lastRenderedHtml) {
+          return;
+        }
+        lastRenderedHtml = renderedHtml;
         await webview.postMessage({
           type: "updateContent",
           renderedHtml,
           displayPath,
-          isLightTheme
+          docTitle,
+          isLightTheme,
+          themeCss
         });
         return;
       }
+
+      lastRenderedHtml = renderedHtml;
 
       const cssUri = webview.asWebviewUri(
         vscode.Uri.joinPath(this.context.extensionUri, "media", "antigravity-markdown.css")
@@ -1053,9 +1153,11 @@ class AntigravityMarkdownReviewProvider {
         jsUri,
         renderedHtml,
         displayPath,
+        docTitle,
         isBrainArtifact: info.isBrainArtifact,
         isSymlink: info.isSymlink,
         isLightTheme,
+        themeCss,
         syncScrollEnabled,
         isSplitOpen: isRawSplitOpen(info),
         initialLine: lastSyncedLine
@@ -1136,7 +1238,7 @@ class AntigravityMarkdownReviewProvider {
       })
     );
 
-    // Keep syncScroll and codeLineNumbers settings in sync if changed in VS Code settings
+    // Keep syncScroll, codeLineNumbers, and theme palette settings in sync if changed in VS Code settings
     disposables.push(
       vscode.workspace.onDidChangeConfiguration((e) => {
         if (e.affectsConfiguration("agyMarkdown.syncScroll")) {
@@ -1151,14 +1253,25 @@ class AntigravityMarkdownReviewProvider {
         if (e.affectsConfiguration("agyMarkdown.codeLineNumbers")) {
           renderToWebview(true);
         }
+        if (
+          e.affectsConfiguration("agyMarkdown.useThemePalette") ||
+          e.affectsConfiguration("workbench.colorTheme") ||
+          e.affectsConfiguration("workbench.colorCustomizations") ||
+          e.affectsConfiguration("editor.tokenColorCustomizations") ||
+          e.affectsConfiguration("editor.semanticTokenColorCustomizations")
+        ) {
+          scheduleRender(40);
+        }
       })
     );
 
-    // When preview panel becomes visible alongside a raw editor, align scroll position
+    // When preview panel transitions from hidden to visible alongside a raw editor, align scroll position
     disposables.push(
       webviewPanel.onDidChangeViewState(() => {
+        const becameVisible = !wasPanelVisible && Boolean(webviewPanel.visible);
+        wasPanelVisible = Boolean(webviewPanel.visible);
         broadcastSplitState();
-        if (!webviewPanel.visible || !syncScrollEnabled) return;
+        if (!becameVisible || !syncScrollEnabled) return;
         const editors = findMatchingVisibleEditors(info);
         if (editors.length > 0) {
           const line = getTopVisibleLine(editors[0]);
@@ -1186,19 +1299,17 @@ class AntigravityMarkdownReviewProvider {
       })
     );
 
-    // Watch underlying file on disk (including symlink target in brain)
-    const watchedPaths = new Set([info.fsPath, info.realPath]);
-    for (const wp of watchedPaths) {
-      try {
-        if (fs.existsSync(wp)) {
-          const watcher = fs.watch(wp, { persistent: false }, () => {
-            scheduleRender(150);
-          });
-          disposables.push({ dispose: () => watcher.close() });
-        }
-      } catch (_) {
-        // ignore watcher errors
+    // Watch canonical file on disk (avoid duplicate fs.watch events on both symlink and target)
+    const primaryWatchPath = fs.existsSync(info.realPath) ? info.realPath : info.fsPath;
+    try {
+      if (fs.existsSync(primaryWatchPath)) {
+        const watcher = fs.watch(primaryWatchPath, { persistent: false }, () => {
+          scheduleRender(220);
+        });
+        disposables.push({ dispose: () => watcher.close() });
       }
+    } catch (_) {
+      // ignore watcher errors
     }
 
     // Handle toolbar, scroll sync, & link clicks from webview
@@ -1619,6 +1730,359 @@ function escapeHtml(s) {
     .replace(/>/g, "&gt;");
 }
 
+function stripJsonc(raw) {
+  let out = "";
+  let inStr = false;
+  let strQuote = '"';
+  let i = 0;
+  const len = raw.length;
+  while (i < len) {
+    const ch = raw[i];
+    const next = raw[i + 1];
+    if (inStr) {
+      out += ch;
+      if (ch === "\\" && i + 1 < len) {
+        out += raw[i + 1];
+        i += 2;
+        continue;
+      }
+      if (ch === strQuote) {
+        inStr = false;
+      }
+      i++;
+      continue;
+    }
+    if (ch === '"' || ch === "'") {
+      inStr = true;
+      strQuote = ch;
+      out += ch;
+      i++;
+      continue;
+    }
+    if (ch === "/" && next === "/") {
+      i += 2;
+      while (i < len && raw[i] !== "\n") i++;
+      continue;
+    }
+    if (ch === "/" && next === "*") {
+      i += 2;
+      while (i + 1 < len && !(raw[i] === "*" && raw[i + 1] === "/")) i++;
+      i += 2;
+      continue;
+    }
+    out += ch;
+    i++;
+  }
+  return out.replace(/,\s*([}\]])/g, "$1");
+}
+
+function loadThemeJsonRecursive(themeFilePath, visited = new Set()) {
+  if (!themeFilePath || visited.has(themeFilePath) || !fs.existsSync(themeFilePath)) {
+    return { colors: {}, semanticTokenColors: {}, tokenColors: [] };
+  }
+  visited.add(themeFilePath);
+  try {
+    const raw = fs.readFileSync(themeFilePath, "utf8");
+    const parsed = JSON.parse(stripJsonc(raw));
+    let base = { colors: {}, semanticTokenColors: {}, tokenColors: [] };
+    if (typeof parsed.include === "string" && parsed.include.trim()) {
+      const includePath = path.resolve(path.dirname(themeFilePath), parsed.include.trim());
+      base = loadThemeJsonRecursive(includePath, visited);
+    }
+    return {
+      colors: Object.assign({}, base.colors, parsed.colors || {}),
+      semanticTokenColors: Object.assign(
+        {},
+        base.semanticTokenColors,
+        parsed.semanticTokenColors || {}
+      ),
+      tokenColors: []
+        .concat(Array.isArray(base.tokenColors) ? base.tokenColors : [])
+        .concat(Array.isArray(parsed.tokenColors) ? parsed.tokenColors : [])
+    };
+  } catch (_) {
+    return { colors: {}, semanticTokenColors: {}, tokenColors: [] };
+  }
+}
+
+function findThemeFileByName(themeName) {
+  if (!themeName || typeof themeName !== "string") return null;
+  const target = themeName.trim().toLowerCase();
+
+  const matchThemeEntry = (extPath, themes) => {
+    if (!Array.isArray(themes)) return null;
+    for (const t of themes) {
+      if (!t || typeof t.path !== "string") continue;
+      const id = String(t.id || "").trim().toLowerCase();
+      const label = String(t.label || "").trim().toLowerCase();
+      if (id === target || label === target) {
+        const full = path.resolve(extPath, t.path);
+        if (fs.existsSync(full)) return full;
+      }
+    }
+    return null;
+  };
+
+  if (vscode.extensions && Array.isArray(vscode.extensions.all)) {
+    for (const ext of vscode.extensions.all) {
+      const pkg = ext && ext.packageJSON;
+      const themes = pkg && pkg.contributes && pkg.contributes.themes;
+      const found = matchThemeEntry(ext.extensionPath, themes);
+      if (found) return found;
+    }
+  }
+
+  const extDirs = [
+    path.join(os.homedir(), ".vscode", "extensions"),
+    path.join(os.homedir(), ".antigravity", "extensions")
+  ];
+  for (const dir of extDirs) {
+    try {
+      if (!fs.existsSync(dir)) continue;
+      for (const entry of fs.readdirSync(dir)) {
+        const extPath = path.join(dir, entry);
+        const pkgPath = path.join(extPath, "package.json");
+        if (!fs.existsSync(pkgPath)) continue;
+        try {
+          const pkg = JSON.parse(fs.readFileSync(pkgPath, "utf8"));
+          const found = matchThemeEntry(extPath, pkg.contributes && pkg.contributes.themes);
+          if (found) return found;
+        } catch (_) {}
+      }
+    } catch (_) {}
+  }
+  return null;
+}
+
+function isValidCssColor(val) {
+  if (typeof val !== "string") return false;
+  const s = val.trim();
+  return /^#[0-9a-fA-F]{3,8}$/.test(s);
+}
+
+function extractSemanticOrScopeColor(themeData, semanticKeys, textmateScopes) {
+  const sem = (themeData && themeData.semanticTokenColors) || {};
+  for (const key of semanticKeys) {
+    const entry = sem[key];
+    if (!entry) continue;
+    if (typeof entry === "string" && isValidCssColor(entry)) {
+      return entry.trim();
+    }
+    if (entry && typeof entry === "object" && isValidCssColor(entry.foreground)) {
+      return entry.foreground.trim();
+    }
+  }
+
+  const rules = (themeData && Array.isArray(themeData.tokenColors) && themeData.tokenColors) || [];
+  for (const targetScope of textmateScopes) {
+    for (let i = rules.length - 1; i >= 0; i--) {
+      const rule = rules[i];
+      const fg = rule && rule.settings && rule.settings.foreground;
+      if (!isValidCssColor(fg)) continue;
+      const rawScope = rule.scope;
+      const scopes = Array.isArray(rawScope)
+        ? rawScope
+        : typeof rawScope === "string"
+        ? rawScope.split(",").map((s) => s.trim())
+        : [];
+      if (scopes.includes(targetScope)) {
+        return fg.trim();
+      }
+    }
+  }
+
+  for (const targetScope of textmateScopes) {
+    for (let i = rules.length - 1; i >= 0; i--) {
+      const rule = rules[i];
+      const fg = rule && rule.settings && rule.settings.foreground;
+      if (!isValidCssColor(fg)) continue;
+      const rawScope = rule.scope;
+      const scopes = Array.isArray(rawScope)
+        ? rawScope
+        : typeof rawScope === "string"
+        ? rawScope.split(",").map((s) => s.trim())
+        : [];
+      if (
+        scopes.some(
+          (s) =>
+            s === targetScope ||
+            targetScope.startsWith(s + ".") ||
+            s.startsWith(targetScope + ".")
+        )
+      ) {
+        return fg.trim();
+      }
+    }
+  }
+
+  return null;
+}
+
+function buildThemeOverrideCss() {
+  const agyCfg = vscode.workspace.getConfiguration("agyMarkdown");
+  if (!agyCfg.get("useThemePalette", true)) {
+    return "";
+  }
+
+  const workbenchCfg = vscode.workspace.getConfiguration("workbench");
+  const themeName = workbenchCfg.get("colorTheme") || "";
+  const themeFile = findThemeFileByName(themeName);
+  const themeData = themeFile
+    ? loadThemeJsonRecursive(themeFile)
+    : { colors: {}, semanticTokenColors: {}, tokenColors: [] };
+
+  const colorCustomizations = workbenchCfg.get("colorCustomizations") || {};
+  if (colorCustomizations && typeof colorCustomizations === "object") {
+    for (const [k, v] of Object.entries(colorCustomizations)) {
+      if (typeof v === "string") {
+        themeData.colors[k] = v;
+      }
+    }
+    const perTheme = colorCustomizations[`[${themeName}]`];
+    if (perTheme && typeof perTheme === "object") {
+      Object.assign(themeData.colors, perTheme);
+    }
+  }
+
+  const editorCfg = vscode.workspace.getConfiguration("editor");
+  const semCustom = editorCfg.get("semanticTokenColorCustomizations") || {};
+  if (semCustom && typeof semCustom === "object") {
+    if (semCustom.rules && typeof semCustom.rules === "object") {
+      Object.assign(themeData.semanticTokenColors, semCustom.rules);
+    }
+    const perThemeSem = semCustom[`[${themeName}]`];
+    if (perThemeSem && perThemeSem.rules && typeof perThemeSem.rules === "object") {
+      Object.assign(themeData.semanticTokenColors, perThemeSem.rules);
+    }
+  }
+
+  const vars = [];
+  const addVar = (name, value) => {
+    if (value && isValidCssColor(value)) {
+      vars.push(`  ${name}: ${value};`);
+    }
+  };
+
+  addVar(
+    "--agy-syn-keyword",
+    extractSemanticOrScopeColor(
+      themeData,
+      ["keyword", "keyword.control", "storage", "modifier"],
+      ["keyword", "keyword.control", "storage.type", "storage.modifier"]
+    )
+  );
+  addVar(
+    "--agy-syn-function",
+    extractSemanticOrScopeColor(
+      themeData,
+      ["function", "method", "member", "function.declaration"],
+      ["entity.name.function", "support.function", "meta.function-call"]
+    )
+  );
+  addVar(
+    "--agy-syn-type",
+    extractSemanticOrScopeColor(
+      themeData,
+      ["class", "type", "interface", "enum", "struct", "namespace", "typeParameter"],
+      ["entity.name.type", "entity.name.class", "support.class", "support.type"]
+    )
+  );
+  addVar(
+    "--agy-syn-string",
+    extractSemanticOrScopeColor(
+      themeData,
+      ["string"],
+      ["string", "string.quoted", "string.quoted.single", "string.quoted.double"]
+    )
+  );
+  addVar(
+    "--agy-syn-number",
+    extractSemanticOrScopeColor(
+      themeData,
+      ["number", "enumMember", "boolean"],
+      ["constant.numeric", "constant.language", "constant.character"]
+    )
+  );
+  addVar(
+    "--agy-syn-param",
+    extractSemanticOrScopeColor(
+      themeData,
+      ["parameter", "variable.parameter", "variable.readonly", "variable.defaultLibrary"],
+      ["variable.parameter", "variable.other.constant", "variable.language"]
+    )
+  );
+  addVar(
+    "--agy-syn-attr",
+    extractSemanticOrScopeColor(
+      themeData,
+      ["property", "variable.other.property", "property.declaration"],
+      [
+        "support.type.property-name",
+        "entity.other.attribute-name",
+        "variable.other.property",
+        "meta.object-literal.key"
+      ]
+    )
+  );
+  addVar(
+    "--agy-syn-meta",
+    extractSemanticOrScopeColor(
+      themeData,
+      ["decorator", "macro", "annotation"],
+      [
+        "meta.decorator",
+        "entity.name.function.decorator",
+        "punctuation.definition.decorator",
+        "meta.preprocessor"
+      ]
+    )
+  );
+  addVar(
+    "--agy-syn-comment",
+    extractSemanticOrScopeColor(
+      themeData,
+      ["comment"],
+      ["comment", "comment.line", "comment.block", "punctuation.definition.comment"]
+    )
+  );
+  addVar(
+    "--agy-syn-punct",
+    extractSemanticOrScopeColor(
+      themeData,
+      ["operator", "punctuation"],
+      ["keyword.operator", "punctuation", "punctuation.separator"]
+    )
+  );
+  addVar(
+    "--agy-code-fg",
+    extractSemanticOrScopeColor(
+      themeData,
+      ["variable.readonly", "enumMember", "macro", "number"],
+      ["markup.inline.raw", "constant.other", "variable.other.constant", "constant.numeric"]
+    )
+  );
+
+  const colors = themeData.colors || {};
+  const wellBg =
+    colors["notebook.cellEditorBackground"] ||
+    colors["sideBar.background"] ||
+    colors["panel.background"];
+  const sideBg =
+    colors["sideBar.background"] ||
+    colors["panel.background"] ||
+    colors["editorWidget.background"];
+  const lineHlBg = colors["editor.lineHighlightBackground"];
+  const focusBorder = colors["focusBorder"] || colors["editor.selectionBorder"];
+
+  addVar("--agy-theme-well", wellBg);
+  addVar("--agy-theme-sidebar", sideBg);
+  addVar("--agy-code-hl-line-bg", lineHlBg);
+  addVar("--agy-code-hl-line-border", focusBorder);
+
+  if (vars.length === 0) return "";
+  return `:root,\nbody.vscode-light,\nbody.vscode-dark,\nbody.vscode-body,\nbody.agy-review-body.vscode-light,\nbody.agy-review-body.vscode-dark,\n.markdown-preview.markdown-preview {\n${vars.join("\n")}\n}`;
+}
+
 function buildWebviewHtml({
   cssUri,
   katexCssUri,
@@ -1626,22 +2090,23 @@ function buildWebviewHtml({
   jsUri,
   renderedHtml,
   displayPath,
+  docTitle,
   isBrainArtifact,
   isSymlink,
   isLightTheme,
+  themeCss = "",
   syncScrollEnabled = true,
   isSplitOpen = false,
   initialLine = 0
 }) {
-  const brainBadge = isBrainArtifact
-    ? `<span class="agy-badge agy-badge-brain" title="Synced with Antigravity Brain">${isSymlink ? "Brain Shortcut" : "Brain Artifact"}</span>`
-    : "";
-  const nativeBtn = isBrainArtifact
-    ? `<button type="button" class="agy-btn" id="btn-native" title="Open in Native Antigravity Artifact Viewer">Native Viewer ↗</button>`
+  const effectiveTitle = docTitle || formatDocumentTitle(displayPath);
+  const nativeMenuItem = isBrainArtifact
+    ? `<button type="button" class="agy-menu-item" id="btn-native" title="Open in Native Antigravity Artifact Viewer"><span>Native Artifact Viewer ↗</span></button>`
     : "";
   const themeClass = isLightTheme ? "vscode-light" : "vscode-dark";
   const syncActiveClass = syncScrollEnabled ? " agy-btn-active" : "";
   const splitActiveClass = isSplitOpen ? " agy-btn-active" : "";
+  const syncInlineHiddenClass = isSplitOpen ? "" : " agy-hidden";
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -1650,27 +2115,34 @@ function buildWebviewHtml({
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <link rel="stylesheet" href="${katexCssUri}" />
   <link rel="stylesheet" href="${cssUri}?v=${ASSET_CACHE_VERSION}" />
+  <style id="agy-theme-palette">${themeCss || ""}</style>
   <title>Antigravity Markdown Review</title>
 </head>
 <body class="agy-review-body ${themeClass}">
   <div class="agy-toolbar">
     <div class="agy-toolbar-left">
-      <span class="agy-badge">✦ Antigravity Review</span>
-      ${brainBadge}
-      <span class="agy-filepath" title="${escapeHtml(displayPath)}">${escapeHtml(displayPath)}</span>
+      <span class="agy-doc-title agy-filepath" title="${escapeHtml(displayPath)}">${escapeHtml(effectiveTitle)}</span>
     </div>
     <div class="agy-toolbar-actions">
-      ${nativeBtn}
-      <button type="button" class="agy-btn${syncActiveClass}" id="btn-sync" title="Toggle synchronized scrolling between raw Markdown and preview in split edit mode" aria-pressed="${syncScrollEnabled ? "true" : "false"}">⇅ Sync Scroll</button>
-      <button type="button" class="agy-btn" id="btn-copy" title="Copy raw Markdown">Copy MD</button>
-      <button type="button" class="agy-btn${splitActiveClass}" id="btn-split" title="Toggle raw Markdown editor beside this review" aria-pressed="${isSplitOpen ? "true" : "false"}">Split Edit</button>
-      <button type="button" class="agy-btn" id="btn-edit" title="Switch to raw Markdown editor">Edit Raw</button>
+      <button type="button" class="agy-btn agy-btn-subtle${syncActiveClass}${syncInlineHiddenClass}" id="btn-sync-inline" title="Toggle synchronized scrolling between raw Markdown and preview" aria-pressed="${syncScrollEnabled ? "true" : "false"}">⇅ Sync</button>
+      <button type="button" class="agy-btn agy-btn-subtle${splitActiveClass}" id="btn-split" title="Toggle raw Markdown editor beside this review" aria-pressed="${isSplitOpen ? "true" : "false"}">Split Edit</button>
+      <div class="agy-menu-wrap">
+        <button type="button" class="agy-btn-icon" id="btn-more" title="More review actions" aria-haspopup="true" aria-expanded="false">
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><circle cx="8" cy="3" r="1.35"/><circle cx="8" cy="8" r="1.35"/><circle cx="8" cy="13" r="1.35"/></svg>
+        </button>
+        <div class="agy-dropdown-menu" id="agy-more-menu" hidden>
+          <button type="button" class="agy-menu-item" id="btn-sync"><span>⇅ Synchronized Scrolling</span><span class="agy-menu-check" id="sync-check">${syncScrollEnabled ? "✓" : ""}</span></button>
+          <button type="button" class="agy-menu-item" id="btn-copy"><span>Copy Raw Markdown</span></button>
+          <button type="button" class="agy-menu-item" id="btn-edit"><span>Switch to Raw Editor</span></button>
+          ${nativeMenuItem}
+        </div>
+      </div>
     </div>
   </div>
   <main class="agy-review-container" id="agy-content">
     ${renderedHtml}
   </main>
-  <script src="${mermaidJsUri}"></script>
+  <script src="${mermaidJsUri}?v=${ASSET_CACHE_VERSION}"></script>
   <script src="${jsUri}?v=${ASSET_CACHE_VERSION}"></script>
   <script>
     (function() {
@@ -1680,6 +2152,10 @@ function buildWebviewHtml({
       const btnCopy = document.getElementById("btn-copy");
       const btnNative = document.getElementById("btn-native");
       const btnSync = document.getElementById("btn-sync");
+      const btnSyncInline = document.getElementById("btn-sync-inline");
+      const syncCheckEl = document.getElementById("sync-check");
+      const btnMore = document.getElementById("btn-more");
+      const moreMenu = document.getElementById("agy-more-menu");
       const toolbarEl = document.querySelector(".agy-toolbar");
       const contentEl = document.getElementById("agy-content");
       const filepathEl = document.querySelector(".agy-filepath");
@@ -1697,16 +2173,31 @@ function buildWebviewHtml({
       let smoothRafId = 0;
       let lastSmoothFrameTime = 0;
 
+      function closeMoreMenu() {
+        if (!moreMenu || !btnMore) return;
+        moreMenu.hidden = true;
+        btnMore.setAttribute("aria-expanded", "false");
+        btnMore.classList.remove("agy-btn-active");
+      }
+
       function updateSyncButtonUi() {
-        if (!btnSync) return;
-        btnSync.classList.toggle("agy-btn-active", Boolean(syncScrollEnabled));
-        btnSync.setAttribute("aria-pressed", syncScrollEnabled ? "true" : "false");
+        if (btnSyncInline) {
+          btnSyncInline.classList.toggle("agy-btn-active", Boolean(syncScrollEnabled));
+          btnSyncInline.setAttribute("aria-pressed", syncScrollEnabled ? "true" : "false");
+        }
+        if (syncCheckEl) {
+          syncCheckEl.textContent = syncScrollEnabled ? "✓" : "";
+        }
       }
 
       function updateSplitButtonUi() {
-        if (!btnSplit) return;
-        btnSplit.classList.toggle("agy-btn-active", Boolean(isSplitOpen));
-        btnSplit.setAttribute("aria-pressed", isSplitOpen ? "true" : "false");
+        if (btnSplit) {
+          btnSplit.classList.toggle("agy-btn-active", Boolean(isSplitOpen));
+          btnSplit.setAttribute("aria-pressed", isSplitOpen ? "true" : "false");
+        }
+        if (btnSyncInline) {
+          btnSyncInline.classList.toggle("agy-hidden", !isSplitOpen);
+        }
       }
 
       function getAnchorOffset() {
@@ -2005,8 +2496,35 @@ function buildWebviewHtml({
         { passive: true }
       );
 
+      function toggleSyncScroll() {
+        syncScrollEnabled = !syncScrollEnabled;
+        updateSyncButtonUi();
+        vscode.postMessage({ type: "toggleSyncScroll", enabled: syncScrollEnabled });
+      }
+
+      if (btnMore && moreMenu) {
+        btnMore.addEventListener("click", (e) => {
+          e.stopPropagation();
+          const willOpen = moreMenu.hidden;
+          moreMenu.hidden = !willOpen;
+          btnMore.setAttribute("aria-expanded", willOpen ? "true" : "false");
+          btnMore.classList.toggle("agy-btn-active", willOpen);
+        });
+        document.addEventListener("click", (e) => {
+          if (!moreMenu.hidden && !moreMenu.contains(e.target) && e.target !== btnMore) {
+            closeMoreMenu();
+          }
+        });
+        window.addEventListener("keydown", (e) => {
+          if (e.key === "Escape" && !moreMenu.hidden) {
+            closeMoreMenu();
+          }
+        });
+      }
+
       if (btnEdit) {
         btnEdit.addEventListener("click", () => {
+          closeMoreMenu();
           const line = getSourceLineForScrollY(window.scrollY);
           vscode.postMessage({ type: "editSource", beside: false, line });
         });
@@ -2019,18 +2537,43 @@ function buildWebviewHtml({
       }
       if (btnSync) {
         btnSync.addEventListener("click", () => {
-          syncScrollEnabled = !syncScrollEnabled;
-          updateSyncButtonUi();
-          vscode.postMessage({ type: "toggleSyncScroll", enabled: syncScrollEnabled });
+          toggleSyncScroll();
+          closeMoreMenu();
         });
       }
-      if (btnCopy) btnCopy.addEventListener("click", () => vscode.postMessage({ type: "copyRaw" }));
-      if (btnNative) btnNative.addEventListener("click", () => vscode.postMessage({ type: "openNativeArtifact" }));
+      if (btnSyncInline) {
+        btnSyncInline.addEventListener("click", () => {
+          toggleSyncScroll();
+        });
+      }
+      if (btnCopy) {
+        btnCopy.addEventListener("click", () => {
+          closeMoreMenu();
+          vscode.postMessage({ type: "copyRaw" });
+        });
+      }
+      if (btnNative) {
+        btnNative.addEventListener("click", () => {
+          closeMoreMenu();
+          vscode.postMessage({ type: "openNativeArtifact" });
+        });
+      }
 
-      function applyThemeClass(isLight) {
+      function applyThemeClass(isLight, themeCss) {
         if (!document.body) return;
         document.body.classList.toggle("vscode-light", Boolean(isLight));
         document.body.classList.toggle("vscode-dark", !isLight);
+        if (typeof themeCss === "string") {
+          let styleEl = document.getElementById("agy-theme-palette");
+          if (!styleEl && document.head) {
+            styleEl = document.createElement("style");
+            styleEl.id = "agy-theme-palette";
+            document.head.appendChild(styleEl);
+          }
+          if (styleEl && styleEl.textContent !== themeCss) {
+            styleEl.textContent = themeCss;
+          }
+        }
       }
 
       let scrollEmitPending = false;
@@ -2105,8 +2648,11 @@ function buildWebviewHtml({
           return;
         }
         if (msg.type === "updateTheme") {
-          applyThemeClass(msg.isLightTheme);
+          applyThemeClass(msg.isLightTheme, msg.themeCss);
           window.dispatchEvent(new CustomEvent("vscode.markdown.updateContent"));
+          requestAnimationFrame(() => {
+            window.dispatchEvent(new CustomEvent("vscode.markdown.updateContent"));
+          });
           return;
         }
         if (msg.type === "updateContent") {
@@ -2114,9 +2660,12 @@ function buildWebviewHtml({
           const prevScrollX = window.scrollX;
           cancelProgrammaticSmoothScroll();
           programmaticScrollLockUntil = performance.now() + 260;
-          applyThemeClass(msg.isLightTheme);
+          applyThemeClass(msg.isLightTheme, msg.themeCss);
           if (filepathEl && typeof msg.displayPath === "string") {
-            filepathEl.textContent = msg.displayPath;
+            filepathEl.textContent =
+              typeof msg.docTitle === "string" && msg.docTitle
+                ? msg.docTitle
+                : msg.displayPath;
             filepathEl.setAttribute("title", msg.displayPath);
           }
           if (contentEl && typeof msg.renderedHtml === "string") {
@@ -2171,11 +2720,12 @@ function syncMarkdownPreviewEnhanced(extensionPath) {
       path.join(extensionPath, "media", "antigravity-markdown.css"),
       "utf8"
     );
+    const themeCss = buildThemeOverrideCss();
 
     const styleLessPath = path.join(crossnoteDir, "style.less");
     const beginMarker = "/* BEGIN ANTIGRAVITY MARKDOWN STYLE */";
     const endMarker = "/* END ANTIGRAVITY MARKDOWN STYLE */";
-    const styleBlock = `${beginMarker}\n${cssSource}\n${endMarker}`;
+    const styleBlock = `${beginMarker}\n${cssSource}${themeCss ? `\n\n/* Active VS Code Theme Palette */\n${themeCss}\n` : "\n"}${endMarker}`;
 
     let existingStyle = "";
     if (fs.existsSync(styleLessPath)) {
@@ -2197,9 +2747,9 @@ function syncMarkdownPreviewEnhanced(extensionPath) {
   // Managed by Antigravity Markdown Review (iamqazolp.agy-markdown-review)
   onWillParseMarkdown: async function(markdown) {
     return String(markdown || "").replace(
-      /(\`{3,})carousel[^\\n]*\\n([\\s\\S]*?)\\n\\1(?:\\s*$|\\s*\\n)/gm,
+      /^[ \\t]*(\`{3,})carousel[ \\t]*\\r?\\n([\\s\\S]*?)\\r?\\n[ \\t]*\\1[ \\t]*(?:$|\\r?\\n)/gm,
       function(fullMatch, _fence, inner) {
-        const slides = inner.split(/<!--\\s*slide\\s*-->/i).map(s => s.trim()).filter(Boolean);
+        const slides = inner.split(/(?:^|\\r?\\n)[ \\t]*<!--\\s*slide\\s*-->[ \\t]*(?=\\r?\\n|$)/i).map(s => s.trim()).filter(Boolean);
         if (!slides.length) return fullMatch;
         const navJs = "const c=this.closest('.agy-carousel');const s=Array.from(c.querySelectorAll('.agy-carousel-slide'));let i=s.findIndex(x=>x.classList.contains('active'));if(i<0)i=0;i=(i+DIR+s.length)%s.length;s.forEach((el,idx)=>el.classList.toggle('active',idx===i));const cnt=c.querySelector('.agy-carousel-counter');if(cnt)cnt.textContent='Slide '+(i+1)+' of '+s.length;";
         const prevAttr = navJs.replace("DIR", "-1");
@@ -2218,7 +2768,6 @@ function syncMarkdownPreviewEnhanced(extensionPath) {
   },
 
   onDidParseMarkdown: async function(html) {
-    const icons = ${JSON.stringify(ALERT_ICONS)};
     const labels = ${JSON.stringify(ALERT_LABELS)};
     return String(html || "").replace(
       /<blockquote>\\s*<p>\\[!(NOTE|TIP|IMPORTANT|WARNING|CAUTION)\\](?:\\s*<br\\s*\\/?>|\\s*\\n|\\s+)?([\\s\\S]*?)<\\/blockquote>/gi,
@@ -2226,7 +2775,7 @@ function syncMarkdownPreviewEnhanced(extensionPath) {
         const t = rawType.toLowerCase();
         const body = rest.trim().startsWith("</p>") ? rest.trim().slice(4) : "<p>" + rest;
         return '<div class="markdown-alert markdown-alert-' + t + '">' +
-          '<p class="markdown-alert-title">' + (icons[t] || "") + (labels[t] || rawType) + '</p>' +
+          '<p class="markdown-alert-title">' + (labels[t] || rawType.toUpperCase()) + '</p>' +
           body + '</div>';
       }
     );
@@ -2240,6 +2789,15 @@ function syncMarkdownPreviewEnhanced(extensionPath) {
 }
 
 function extendMarkdownItWithAntigravity(md) {
+  const origValidateLink =
+    typeof md.validateLink === "function" ? md.validateLink.bind(md) : null;
+  md.validateLink = function (url) {
+    if (/^(?:file|conversation):\/\//i.test(String(url || "").trim())) {
+      return true;
+    }
+    return origValidateLink ? origValidateLink(url) : true;
+  };
+
   md.core.ruler.push("agy_source_line_range", (state) => {
     for (const token of state.tokens) {
       if (token.map && token.type !== "inline") {
@@ -2487,6 +3045,32 @@ function activate(context) {
   if (cfg.get("syncMarkdownPreviewEnhanced", true)) {
     syncMarkdownPreviewEnhanced(context.extensionPath);
   }
+
+  context.subscriptions.push(
+    vscode.window.onDidChangeActiveColorTheme(() => {
+      if (
+        vscode.workspace
+          .getConfiguration("agyMarkdown")
+          .get("syncMarkdownPreviewEnhanced", true)
+      ) {
+        syncMarkdownPreviewEnhanced(context.extensionPath);
+      }
+    }),
+    vscode.workspace.onDidChangeConfiguration((e) => {
+      if (
+        e.affectsConfiguration("agyMarkdown.useThemePalette") ||
+        e.affectsConfiguration("workbench.colorTheme")
+      ) {
+        if (
+          vscode.workspace
+            .getConfiguration("agyMarkdown")
+            .get("syncMarkdownPreviewEnhanced", true)
+        ) {
+          syncMarkdownPreviewEnhanced(context.extensionPath);
+        }
+      }
+    })
+  );
 
   try {
     vscode.commands.executeCommand("markdown.api.reloadPlugins").then(

@@ -14,27 +14,31 @@ body.agy-review-body.vscode-dark,
 .markdown-preview.markdown-preview[data-use-github-style="false"] {
   --agy-bg: var(--vscode-editor-background, #18181b);
   --agy-surface: var(--vscode-editorWidget-background, #1f1f23);
+  --agy-theme-well: var(--vscode-notebook-cellEditorBackground, var(--vscode-sideBar-background, var(--agy-bg)));
+  --agy-theme-sidebar: var(--vscode-sideBar-background, var(--vscode-panel-background, var(--agy-bg)));
   --agy-fg: var(--vscode-editor-foreground, #f4f4f5);
   --agy-heading: var(--vscode-editor-foreground, #fafafa);
-  --agy-muted: color-mix(in srgb, var(--agy-bg) 88%, var(--agy-fg, #f4f4f5) 12%);
+  --agy-muted: color-mix(in srgb, color-mix(in srgb, var(--agy-bg) 72%, var(--agy-theme-well) 28%) 94%, var(--agy-fg, #f4f4f5) 6%);
   --agy-muted-fg: var(--vscode-descriptionForeground, #a1a1aa);
-  --agy-secondary: color-mix(in srgb, var(--agy-bg) 85%, #000000 15%);
-  --agy-border: color-mix(in srgb, var(--agy-fg, #f4f4f5) 16%, transparent);
-  --agy-table-border: color-mix(in srgb, var(--agy-fg, #f4f4f5) 14%, transparent);
-  --agy-table-row-hover: rgba(255, 255, 255, 0.03);
+  --agy-secondary: color-mix(in srgb, color-mix(in srgb, var(--agy-bg) 55%, var(--agy-theme-sidebar) 45%) 91%, var(--agy-fg, #f4f4f5) 9%);
+  --agy-border: color-mix(in srgb, var(--agy-bg) 62%, var(--vscode-notebook-cellBorderColor, var(--vscode-sideBar-border, rgba(161, 161, 170, 0.35))) 38%);
+  --agy-table-border: color-mix(in srgb, var(--agy-bg) 65%, var(--vscode-notebook-cellBorderColor, var(--vscode-sideBar-border, rgba(161, 161, 170, 0.32))) 35%);
+  --agy-table-row-hover: transparent;
   --agy-link: var(--vscode-textLink-foreground, #6a9fcb);
   --agy-link-hover: var(--vscode-textLink-activeForeground, #8ab8df);
   --agy-code-fg: #e6db74;
-  --agy-code-bg: color-mix(in srgb, var(--agy-bg) 78%, #000000 22%);
-  --agy-code-header-bg: color-mix(in srgb, var(--agy-bg) 66%, #000000 34%);
+  --agy-code-bg: color-mix(in srgb, color-mix(in srgb, var(--agy-bg) 45%, var(--agy-theme-well) 55%) 80%, #000000 20%);
+  --agy-mermaid-bg: color-mix(in srgb, color-mix(in srgb, var(--agy-bg) 70%, var(--agy-theme-sidebar) 30%) 88%, var(--agy-fg, #f4f4f5) 12%);
+  --agy-mermaid-border: color-mix(in srgb, var(--agy-bg) 74%, var(--agy-fg, #f4f4f5) 26%);
+  --agy-code-header-bg: color-mix(in srgb, color-mix(in srgb, var(--agy-bg) 30%, var(--agy-theme-sidebar) 70%) 68%, #000000 32%);
   --agy-inline-code-border: color-mix(in srgb, var(--agy-fg, #f4f4f5) 10%, transparent);
-  --agy-blockquote-bg: rgba(255, 255, 255, 0.025);
-  --agy-toolbar-bg: color-mix(in srgb, var(--agy-bg) 88%, transparent);
-  --agy-alert-note: #58a6ff;
-  --agy-alert-tip: #3fb950;
-  --agy-alert-important: #a371f7;
-  --agy-alert-warning: #d29922;
-  --agy-alert-caution: #f85149;
+  --agy-blockquote-bg: color-mix(in srgb, var(--agy-theme-well) 35%, transparent);
+  --agy-toolbar-bg: color-mix(in srgb, color-mix(in srgb, var(--agy-bg) 78%, var(--agy-theme-sidebar) 22%) 90%, transparent);
+  --agy-alert-note: var(--vscode-charts-blue, var(--vscode-editorInfo-foreground, #58a6ff));
+  --agy-alert-tip: var(--vscode-charts-green, var(--vscode-terminal-ansiGreen, #3fb950));
+  --agy-alert-important: var(--vscode-charts-purple, var(--vscode-terminal-ansiMagenta, #a371f7));
+  --agy-alert-warning: var(--vscode-charts-yellow, var(--vscode-editorWarning-foreground, #d29922));
+  --agy-alert-caution: var(--vscode-charts-red, var(--vscode-editorError-foreground, #f85149));
   --agy-syn-fg: var(--vscode-editor-foreground, #f8f8f2);
   --agy-syn-keyword: #ff6188;
   --agy-syn-type: #66d9ef;
@@ -50,10 +54,10 @@ body.agy-review-body.vscode-dark,
   --agy-syn-add-fg: #7ee787;
   --agy-syn-del-bg: rgba(248, 81, 73, 0.16);
   --agy-syn-del-fg: #ffa198;
-  --agy-code-hl-line-bg: rgba(88, 166, 255, 0.13);
-  --agy-code-hl-line-border: #58a6ff;
-  --agy-font-sans: var(--vscode-font-family, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif);
-  --agy-font-mono: var(--vscode-editor-font-family, "SF Mono", Menlo, Monaco, Consolas, "Liberation Mono", monospace);
+  --agy-code-hl-line-bg: var(--vscode-editor-lineHighlightBackground, rgba(88, 166, 255, 0.13));
+  --agy-code-hl-line-border: var(--vscode-focusBorder, #58a6ff);
+  --agy-font-sans: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --agy-font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
 }
 
 body.vscode-light,
@@ -65,27 +69,31 @@ body.vscode-high-contrast-light .markdown-preview.markdown-preview,
 .markdown-preview.markdown-preview[data-use-github-style="true"]:not(.vscode-dark) {
   --agy-bg: var(--vscode-editor-background, #ffffff);
   --agy-surface: var(--vscode-editorWidget-background, #f8fafc);
-  --agy-fg: var(--vscode-editor-foreground, #1e293b);
-  --agy-heading: var(--vscode-editor-foreground, #0f172a);
-  --agy-muted: color-mix(in srgb, var(--agy-bg) 93.5%, var(--agy-fg, #0f172a) 6.5%);
-  --agy-muted-fg: var(--vscode-descriptionForeground, #52606d);
-  --agy-secondary: color-mix(in srgb, var(--agy-bg) 96%, #000000 4%);
-  --agy-border: color-mix(in srgb, var(--agy-fg, #0f172a) 15%, transparent);
-  --agy-table-border: color-mix(in srgb, var(--agy-fg, #0f172a) 14%, transparent);
-  --agy-table-row-hover: rgba(15, 23, 42, 0.035);
+  --agy-theme-well: var(--vscode-notebook-cellEditorBackground, var(--vscode-sideBar-background, var(--agy-bg)));
+  --agy-theme-sidebar: var(--vscode-sideBar-background, var(--vscode-panel-background, var(--agy-bg)));
+  --agy-fg: var(--vscode-editor-foreground, #18181b);
+  --agy-heading: var(--vscode-editor-foreground, #09090b);
+  --agy-muted: color-mix(in srgb, color-mix(in srgb, var(--agy-bg) 76%, var(--agy-theme-well) 24%) 97.3%, var(--agy-fg, #09090b) 2.7%);
+  --agy-muted-fg: var(--vscode-descriptionForeground, #52525b);
+  --agy-secondary: color-mix(in srgb, color-mix(in srgb, var(--agy-bg) 62%, var(--agy-theme-sidebar) 38%) 93.8%, var(--agy-fg, #09090b) 6.2%);
+  --agy-border: color-mix(in srgb, var(--agy-bg) 58%, var(--vscode-notebook-cellBorderColor, var(--vscode-sideBar-border, color-mix(in srgb, var(--agy-bg) 82%, var(--agy-fg, #09090b) 18%))) 42%);
+  --agy-table-border: color-mix(in srgb, var(--agy-bg) 58%, var(--vscode-notebook-cellBorderColor, var(--vscode-sideBar-border, color-mix(in srgb, var(--agy-bg) 82%, var(--agy-fg, #09090b) 18%))) 42%);
+  --agy-table-row-hover: transparent;
   --agy-link: var(--vscode-textLink-foreground, #0969da);
   --agy-link-hover: var(--vscode-textLink-activeForeground, #0550ae);
-  --agy-code-fg: #9a3412;
-  --agy-code-bg: color-mix(in srgb, var(--agy-bg) 95%, #000000 5%);
-  --agy-code-header-bg: color-mix(in srgb, var(--agy-bg) 91%, #000000 9%);
-  --agy-inline-code-border: color-mix(in srgb, var(--agy-fg, #0f172a) 10%, transparent);
-  --agy-blockquote-bg: rgba(15, 23, 42, 0.03);
-  --agy-toolbar-bg: color-mix(in srgb, var(--agy-bg) 88%, transparent);
-  --agy-alert-note: #0969da;
-  --agy-alert-tip: #1a7f37;
-  --agy-alert-important: #8250df;
-  --agy-alert-warning: #9a6700;
-  --agy-alert-caution: #cf222e;
+  --agy-code-fg: #991515;
+  --agy-code-bg: color-mix(in srgb, color-mix(in srgb, var(--agy-bg) 52%, var(--agy-theme-well) 48%) 96.5%, var(--agy-fg, #09090b) 3.5%);
+  --agy-mermaid-bg: color-mix(in srgb, color-mix(in srgb, var(--agy-bg) 65%, var(--agy-theme-well) 35%) 94.8%, var(--agy-fg, #09090b) 5.2%);
+  --agy-mermaid-border: color-mix(in srgb, var(--agy-bg) 78%, var(--agy-fg, #09090b) 22%);
+  --agy-code-header-bg: color-mix(in srgb, color-mix(in srgb, var(--agy-bg) 35%, var(--agy-theme-sidebar) 65%) 93.2%, var(--agy-fg, #09090b) 6.8%);
+  --agy-inline-code-border: color-mix(in srgb, var(--agy-fg, #09090b) 8%, transparent);
+  --agy-blockquote-bg: color-mix(in srgb, var(--agy-theme-well) 38%, transparent);
+  --agy-toolbar-bg: color-mix(in srgb, color-mix(in srgb, var(--agy-bg) 80%, var(--agy-theme-sidebar) 20%) 90%, transparent);
+  --agy-alert-note: var(--vscode-charts-blue, var(--vscode-editorInfo-foreground, #3b82f6));
+  --agy-alert-tip: var(--vscode-charts-green, var(--vscode-terminal-ansiGreen, #1a7f37));
+  --agy-alert-important: var(--vscode-charts-purple, var(--vscode-terminal-ansiMagenta, #8250df));
+  --agy-alert-warning: var(--vscode-charts-yellow, var(--vscode-editorWarning-foreground, #9a6700));
+  --agy-alert-caution: var(--vscode-charts-red, var(--vscode-editorError-foreground, #cf222e));
   --agy-syn-fg: var(--vscode-editor-foreground, #1e293b);
   --agy-syn-keyword: #d73a49;
   --agy-syn-type: #0550ae;
@@ -101,8 +109,8 @@ body.vscode-high-contrast-light .markdown-preview.markdown-preview,
   --agy-syn-add-fg: #116329;
   --agy-syn-del-bg: rgba(207, 34, 46, 0.12);
   --agy-syn-del-fg: #a40e26;
-  --agy-code-hl-line-bg: rgba(9, 105, 218, 0.09);
-  --agy-code-hl-line-border: #0969da;
+  --agy-code-hl-line-bg: var(--vscode-editor-lineHighlightBackground, rgba(9, 105, 218, 0.09));
+  --agy-code-hl-line-border: var(--vscode-focusBorder, #0969da);
 }
 
 @media print {
@@ -145,7 +153,8 @@ body.agy-review-body,
   font-family: var(--agy-font-sans) !important;
   font-size: 14px !important;
   line-height: 1.625 !important;
-  -webkit-font-smoothing: antialiased;
+  -webkit-font-smoothing: auto !important;
+  text-rendering: optimizeLegibility;
   user-select: text !important;
   -webkit-user-select: text !important;
   margin: 0;
@@ -153,26 +162,31 @@ body.agy-review-body,
 }
 
 body.vscode-body {
-  max-width: 880px;
+  max-width: 896px;
   margin: 0 auto !important;
-  padding: 28px 36px 64px !important;
+  padding: 24px 36px 64px !important;
 }
 
 .agy-review-container {
-  max-width: 880px;
+  max-width: 896px;
   margin: 0 auto;
-  padding: 24px 36px 72px;
+  padding: 22px 36px 72px;
   user-select: text !important;
   -webkit-user-select: text !important;
 }
 
 .markdown-preview.markdown-preview {
-  padding: 24px 32px 64px !important;
+  padding: 22px 32px 64px !important;
 }
 
 /* --------------------------------------------------------------------------
-   Top Review Toolbar (Custom Editor)
+   Top Review Toolbar (Native Antigravity Artifact Header Style)
    -------------------------------------------------------------------------- */
+.agy-badge,
+.agy-badge-brain {
+  display: none !important;
+}
+
 .agy-toolbar {
   position: sticky;
   top: 0;
@@ -181,9 +195,11 @@ body.vscode-body {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 8px 20px;
+  height: 36px;
+  box-sizing: border-box;
+  padding: 0 18px;
   background-color: var(--agy-bg);
-  border-bottom: 1px solid var(--agy-border);
+  border-bottom: 1px solid rgba(128, 128, 128, 0.16);
   font-size: 12px;
   color: var(--agy-muted-fg);
 }
@@ -196,31 +212,13 @@ body.vscode-body {
   overflow: hidden;
 }
 
-.agy-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  padding: 2px 8px;
-  border-radius: 9999px;
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.01em;
-  background: rgba(106, 159, 203, 0.14);
-  color: var(--agy-link);
-  border: 1px solid rgba(106, 159, 203, 0.3);
-  white-space: nowrap;
-}
-
-.agy-badge-brain {
-  background: rgba(163, 113, 247, 0.14);
-  color: var(--agy-alert-important);
-  border-color: rgba(163, 113, 247, 0.3);
-}
-
+.agy-doc-title,
 .agy-filepath {
-  font-family: var(--agy-font-mono);
-  font-size: 11.5px;
-  color: var(--agy-muted-fg);
+  font-family: var(--agy-font-sans);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--agy-heading);
+  letter-spacing: -0.005em;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -233,12 +231,16 @@ body.vscode-body {
   flex-shrink: 0;
 }
 
+.agy-hidden {
+  display: none !important;
+}
+
 .agy-btn {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
-  padding: 4px 10px;
-  border-radius: 6px;
+  gap: 4px;
+  padding: 3px 10px;
+  border-radius: 5px;
   border: 1px solid var(--agy-border);
   background: var(--agy-muted);
   color: var(--agy-fg);
@@ -246,23 +248,99 @@ body.vscode-body {
   font-size: 11.5px;
   font-weight: 500;
   cursor: pointer;
-  transition: background 0.15s ease, border-color 0.15s ease;
+  transition: background 0.14s ease, color 0.14s ease;
+}
+
+.agy-btn.agy-btn-subtle {
+  border-color: transparent;
+  background: var(--agy-muted);
 }
 
 .agy-btn:hover {
-  background: rgba(128, 128, 128, 0.18);
-  border-color: var(--agy-muted-fg);
+  background: rgba(128, 128, 128, 0.16);
 }
 
 .agy-btn.agy-btn-active {
-  background: rgba(106, 159, 203, 0.15);
+  background: rgba(59, 130, 246, 0.13);
   color: var(--agy-link);
-  border-color: rgba(106, 159, 203, 0.38);
+  border-color: rgba(59, 130, 246, 0.28);
 }
 
 .agy-btn.agy-btn-active:hover {
-  background: rgba(106, 159, 203, 0.24);
-  border-color: var(--agy-link);
+  background: rgba(59, 130, 246, 0.2);
+}
+
+.agy-menu-wrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+.agy-btn-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border-radius: 5px;
+  border: none;
+  background: transparent;
+  color: var(--agy-muted-fg);
+  cursor: pointer;
+  transition: background 0.14s ease, color 0.14s ease;
+}
+
+.agy-btn-icon:hover,
+.agy-btn-icon.agy-btn-active {
+  background: var(--agy-muted);
+  color: var(--agy-fg);
+}
+
+.agy-dropdown-menu {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 5px);
+  min-width: 196px;
+  padding: 4px;
+  border-radius: 7px;
+  background: var(--agy-surface);
+  border: 1px solid var(--agy-border);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.14);
+  z-index: 200;
+}
+
+.agy-dropdown-menu[hidden] {
+  display: none !important;
+}
+
+.agy-menu-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  padding: 6px 10px;
+  border: none;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--agy-fg);
+  font-family: var(--agy-font-sans);
+  font-size: 12px;
+  font-weight: 400;
+  text-align: left;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.agy-menu-item:hover {
+  background: var(--agy-muted);
+}
+
+.agy-menu-check {
+  color: var(--agy-link);
+  font-weight: 600;
+  font-size: 12px;
 }
 
 .agy-scroll-sentinel {
@@ -280,15 +358,15 @@ body.vscode-body {
 body.vscode-body h1,
 body.agy-review-body h1,
 .markdown-preview.markdown-preview h1 {
-  font-size: 1.35rem !important;
-  line-height: 1.75rem !important;
+  font-size: 1.25rem !important;
+  line-height: 1.5 !important;
   font-weight: 600 !important;
   color: var(--agy-heading) !important;
   margin-top: 1.5rem !important;
-  margin-bottom: 0.5rem !important;
+  margin-bottom: 0.65rem !important;
   padding-bottom: 0 !important;
   border-bottom: none !important;
-  letter-spacing: -0.015em;
+  letter-spacing: -0.01em;
 }
 
 body.vscode-body h1:first-child,
@@ -301,24 +379,24 @@ body.vscode-body h2,
 body.agy-review-body h2,
 .markdown-preview.markdown-preview h2 {
   font-size: 1.125rem !important;
-  line-height: 1.75rem !important;
+  line-height: 1.5 !important;
   font-weight: 600 !important;
   color: var(--agy-heading) !important;
   margin-top: 1.5rem !important;
   margin-bottom: 0.5rem !important;
   padding-bottom: 0 !important;
   border-bottom: none !important;
-  letter-spacing: -0.01em;
+  letter-spacing: -0.008em;
 }
 
 body.vscode-body h3,
 body.agy-review-body h3,
 .markdown-preview.markdown-preview h3 {
   font-size: 1rem !important;
-  line-height: 1.5rem !important;
-  font-weight: 600 !important;
+  line-height: 1.5 !important;
+  font-weight: 500 !important;
   color: var(--agy-heading) !important;
-  margin-top: 0.95rem !important;
+  margin-top: 1rem !important;
   margin-bottom: 0.25rem !important;
   border-bottom: none !important;
 }
@@ -333,8 +411,8 @@ body.agy-review-body h6,
 .markdown-preview.markdown-preview h5,
 .markdown-preview.markdown-preview h6 {
   font-size: 0.875rem !important;
-  line-height: 1.25rem !important;
-  font-weight: 600 !important;
+  line-height: 1.5 !important;
+  font-weight: 500 !important;
   color: var(--agy-heading) !important;
   margin-top: 0.75rem !important;
   margin-bottom: 0.25rem !important;
@@ -374,10 +452,34 @@ body.agy-review-body li,
 }
 
 body.vscode-body strong,
+body.vscode-body b,
 body.agy-review-body strong,
-.markdown-preview.markdown-preview strong {
-  color: var(--agy-heading);
-  font-weight: 600;
+body.agy-review-body b,
+.markdown-preview.markdown-preview strong,
+.markdown-preview.markdown-preview b {
+  color: var(--agy-heading) !important;
+  font-weight: 700 !important;
+}
+
+body.vscode-body strong :not(pre) > code,
+body.vscode-body b :not(pre) > code,
+body.agy-review-body strong :not(pre) > code,
+body.agy-review-body b :not(pre) > code,
+.markdown-preview.markdown-preview strong :not(pre) > code,
+.markdown-preview.markdown-preview b :not(pre) > code,
+body.vscode-body strong a.agy-file-link,
+body.agy-review-body strong a.agy-file-link,
+.markdown-preview.markdown-preview strong a.agy-file-link {
+  font-weight: 700 !important;
+}
+
+body.vscode-body h1 :not(pre) > code,
+body.agy-review-body h1 :not(pre) > code,
+.markdown-preview.markdown-preview h1 :not(pre) > code,
+body.vscode-body h2 :not(pre) > code,
+body.agy-review-body h2 :not(pre) > code,
+.markdown-preview.markdown-preview h2 :not(pre) > code {
+  font-weight: 600 !important;
 }
 
 body.vscode-body hr,
@@ -386,7 +488,7 @@ body.agy-review-body hr,
   border: 0 !important;
   border-top: 1px solid var(--agy-border) !important;
   opacity: 0.65 !important;
-  margin: 1.25rem 0 !important;
+  margin: 1.15rem 0 !important;
   height: 1px !important;
   background: transparent !important;
 }
@@ -394,16 +496,16 @@ body.agy-review-body hr,
 body.vscode-body blockquote:not(.markdown-alert),
 body.agy-review-body blockquote:not(.markdown-alert),
 .markdown-preview.markdown-preview blockquote:not(.markdown-alert) {
-  margin: 0.65rem 0 !important;
-  padding: 0.4rem 0.9rem !important;
+  margin: 0.6rem 0 !important;
+  padding: 0.3rem 0.85rem !important;
   border-left: 3px solid var(--agy-border) !important;
-  background: var(--agy-blockquote-bg) !important;
+  background: transparent !important;
   color: var(--agy-muted-fg) !important;
-  border-radius: 0 6px 6px 0;
+  border-radius: 0;
 }
 
 /* --------------------------------------------------------------------------
-   Links & File / Conversation Pills
+   Links & Native File / Conversation Mentions
    -------------------------------------------------------------------------- */
 body.vscode-body a,
 body.agy-review-body a,
@@ -411,7 +513,7 @@ body.agy-review-body a,
   color: var(--agy-link) !important;
   text-decoration: none !important;
   word-break: break-word;
-  transition: color 0.12s ease;
+  transition: color 0.12s ease, background-color 0.12s ease;
   -webkit-user-drag: none;
   user-select: text !important;
   -webkit-user-select: text !important;
@@ -424,66 +526,100 @@ body.agy-review-body a:hover,
   text-decoration: underline !important;
 }
 
-a.agy-file-link,
-a.agy-conv-link {
-  display: inline;
-  padding: 0.08rem 0.35rem;
-  border-radius: 4px;
-  background: rgba(106, 159, 203, 0.12);
-  border: 1px solid rgba(106, 159, 203, 0.24);
-  font-family: var(--agy-font-mono);
-  font-size: 0.88em;
-  line-height: 1.45;
-  -webkit-box-decoration-break: clone;
-  box-decoration-break: clone;
-}
-
-a.agy-file-link:hover,
-a.agy-conv-link:hover {
-  background: rgba(106, 159, 203, 0.22);
+body.vscode-body a.agy-file-link,
+body.agy-review-body a.agy-file-link,
+.markdown-preview.markdown-preview a.agy-file-link,
+a.agy-file-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 3.5px;
+  vertical-align: baseline;
+  padding: 0.08rem 0.28rem;
+  border-radius: 0.2rem;
+  background-color: var(--agy-muted) !important;
+  border: none !important;
+  color: var(--agy-code-fg) !important;
+  font-family: var(--agy-font-mono) !important;
+  font-size: 0.9em !important;
+  line-height: 1.38;
   text-decoration: none !important;
 }
 
-.agy-uuid-copy-btn {
-  display: inline-flex;
-  align-items: center;
-  margin-left: 4px;
-  padding: 0 5px;
-  border-radius: 4px;
-  border: 1px solid var(--agy-border);
-  background: var(--agy-secondary);
-  color: var(--agy-muted-fg);
-  font-family: var(--agy-font-sans);
-  font-size: 10.5px;
-  line-height: 1.4;
-  cursor: pointer;
-  vertical-align: baseline;
-  user-select: none;
-  transition: all 0.12s ease;
+body.vscode-body a.agy-file-link:hover,
+body.agy-review-body a.agy-file-link:hover,
+.markdown-preview.markdown-preview a.agy-file-link:hover,
+a.agy-file-link:hover {
+  background-color: color-mix(in srgb, var(--agy-muted) 80%, var(--agy-fg) 20%) !important;
+  color: var(--agy-code-fg) !important;
+  text-decoration: none !important;
 }
 
-.agy-uuid-copy-btn:hover {
-  color: var(--agy-fg);
-  border-color: var(--agy-link);
+a.agy-file-link .agy-file-icon {
+  width: 13px;
+  height: 13px;
+  flex-shrink: 0;
+  display: inline-block;
+  vertical-align: -2px;
+}
+
+body.vscode-body a.agy-file-link > code,
+body.agy-review-body a.agy-file-link > code,
+.markdown-preview.markdown-preview a.agy-file-link > code,
+a.agy-file-link > code {
+  background: transparent !important;
+  padding: 0 !important;
+  border: none !important;
+  font-size: inherit !important;
+  font-weight: inherit !important;
+  color: inherit !important;
+}
+
+a.agy-conv-link {
+  display: inline;
+  padding: 0.08rem 0.28rem;
+  border-radius: 0.2rem;
+  background-color: var(--agy-muted);
+  border: none;
+  font-family: var(--agy-font-mono);
+  font-size: 0.9em;
+  line-height: 1.4;
+}
+
+a.agy-conv-link:hover {
+  background-color: color-mix(in srgb, var(--agy-muted) 80%, var(--agy-fg) 20%);
+  text-decoration: none !important;
 }
 
 /* --------------------------------------------------------------------------
-   Inline Code & Code Blocks (Matches Antigravity Okaidia + rounded-xl container)
+   Inline Code & Code Blocks (Matches Antigravity Okaidia + borderless inline code)
    -------------------------------------------------------------------------- */
 body.vscode-body :not(pre) > code:not(.language-mermaid),
 body.agy-review-body :not(pre) > code:not(.language-mermaid),
 .markdown-preview.markdown-preview :not(pre) > code:not(.language-mermaid) {
   font-family: var(--agy-font-mono) !important;
-  font-size: 0.88em !important;
+  font-size: 0.9em !important;
   background-color: var(--agy-muted) !important;
   color: var(--agy-code-fg) !important;
-  padding: 0.125rem 0.35rem !important;
-  border-radius: 0.25rem !important;
-  border: 1px solid var(--agy-inline-code-border) !important;
+  padding: 0.1rem 0.28rem !important;
+  border-radius: 0.2rem !important;
+  border: none !important;
   word-break: break-word;
   user-select: text !important;
   -webkit-user-select: text !important;
   cursor: text;
+}
+
+body.vscode-body :not(pre) > code.agy-uuid-code,
+body.agy-review-body :not(pre) > code.agy-uuid-code,
+.markdown-preview.markdown-preview :not(pre) > code.agy-uuid-code {
+  cursor: pointer;
+  transition: background-color 0.14s ease, color 0.14s ease;
+}
+
+body.vscode-body :not(pre) > code.agy-uuid-code.copied,
+body.agy-review-body :not(pre) > code.agy-uuid-code.copied,
+.markdown-preview.markdown-preview :not(pre) > code.agy-uuid-code.copied {
+  color: var(--agy-alert-tip) !important;
 }
 
 .agy-code-block {
@@ -800,7 +936,7 @@ pre code .token.bold {
    Tables (Exact Antigravity rounded border-separate table, excluding KaTeX .mtable)
    -------------------------------------------------------------------------- */
 .agy-table-wrapper {
-  margin: 0.85rem 0 !important;
+  margin: 0.75rem 0 !important;
   border-radius: 0.5rem !important;
   overflow-x: auto !important;
   border: 1px solid var(--agy-table-border) !important;
@@ -816,13 +952,14 @@ body.agy-review-body table:not(.mtable),
   border-spacing: 0 !important;
   margin: 0 !important;
   border: none !important;
-  font-size: 13px !important;
+  font-size: 14px !important;
+  line-height: 1.375 !important;
 }
 
 /* Fallback if a markdown table is not yet wrapped */
 body.vscode-body > table:not(.mtable),
 .markdown-preview.markdown-preview > table:not(.mtable) {
-  margin: 0.85rem 0 !important;
+  margin: 0.75rem 0 !important;
   border-radius: 0.5rem !important;
   border: 1px solid var(--agy-table-border) !important;
   overflow: hidden;
@@ -834,11 +971,13 @@ body.agy-review-body table:not(.mtable) > thead > tr > th,
 .markdown-preview.markdown-preview table:not(.mtable) > tbody > tr > th {
   background-color: var(--agy-secondary) !important;
   color: var(--agy-heading) !important;
-  font-weight: 600 !important;
+  font-weight: 500 !important;
+  line-height: 1.375 !important;
   text-align: left !important;
   padding: 0.5rem 0.75rem !important;
   border: none !important;
   border-left: 1px solid var(--agy-table-border) !important;
+  vertical-align: middle !important;
 }
 
 body.vscode-body table:not(.mtable) > thead > tr > th:first-child,
@@ -852,12 +991,13 @@ body.vscode-body table:not(.mtable) > tbody > tr > td,
 body.agy-review-body table:not(.mtable) > tbody > tr > td,
 .markdown-preview.markdown-preview table:not(.mtable) > tbody > tr > td {
   padding: 0.5rem 0.75rem !important;
+  line-height: 1.375 !important;
   border: none !important;
   border-top: 1px solid var(--agy-table-border) !important;
   border-left: 1px solid var(--agy-table-border) !important;
   background-color: transparent !important;
   color: var(--agy-fg) !important;
-  vertical-align: top;
+  vertical-align: middle !important;
 }
 
 body.vscode-body table:not(.mtable) > tbody > tr > td:first-child,
@@ -924,14 +1064,15 @@ body.agy-review-body table:not(.mtable) > tbody > tr:hover > td,
 
 /* --------------------------------------------------------------------------
    GitHub / Antigravity Callout Alerts ([!NOTE], [!TIP], [!IMPORTANT], [!WARNING], [!CAUTION])
+   Matches Native Antigravity Artifact Viewer: clean left border, transparent bg, uppercase title
    -------------------------------------------------------------------------- */
 .markdown-alert {
-  padding: 0.65rem 1rem !important;
+  padding: 0.12rem 0 0.12rem 0.85rem !important;
   margin: 0.75rem 0 !important;
   color: var(--agy-fg) !important;
-  border-left: 0.25em solid var(--agy-border) !important;
-  background: var(--agy-blockquote-bg) !important;
-  border-radius: 0 0.5rem 0.5rem 0 !important;
+  border-left: 3px solid var(--agy-border) !important;
+  background: transparent !important;
+  border-radius: 0 !important;
 }
 
 .markdown-alert > :first-child {
@@ -946,23 +1087,33 @@ body.agy-review-body table:not(.mtable) > tbody > tr:hover > td,
   display: flex !important;
   font-weight: 600 !important;
   align-items: center !important;
-  line-height: 1.25 !important;
-  margin-bottom: 0.3rem !important;
-  font-size: 13.5px !important;
+  line-height: 1.35 !important;
+  margin-bottom: 0.25rem !important;
+  font-size: 12px !important;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
 }
 
 .markdown-alert .octicon {
-  margin-right: 0.5rem !important;
-  display: inline-block !important;
-  overflow: visible !important;
-  vertical-align: text-bottom !important;
-  fill: currentColor !important;
-  flex-shrink: 0;
+  display: none !important;
+}
+
+.markdown-alert ul,
+.markdown-alert ol {
+  margin-top: 0.2rem !important;
+  margin-bottom: 0.2rem !important;
+  padding-left: 1.25rem !important;
+}
+
+.markdown-alert li {
+  margin-top: 0.2rem !important;
+  margin-bottom: 0.2rem !important;
+  line-height: 1.625 !important;
 }
 
 .markdown-alert.markdown-alert-note {
   border-left-color: var(--agy-alert-note) !important;
-  background: rgba(88, 166, 255, 0.08) !important;
+  background: transparent !important;
 }
 .markdown-alert.markdown-alert-note .markdown-alert-title {
   color: var(--agy-alert-note) !important;
@@ -970,7 +1121,7 @@ body.agy-review-body table:not(.mtable) > tbody > tr:hover > td,
 
 .markdown-alert.markdown-alert-tip {
   border-left-color: var(--agy-alert-tip) !important;
-  background: rgba(63, 185, 80, 0.08) !important;
+  background: transparent !important;
 }
 .markdown-alert.markdown-alert-tip .markdown-alert-title {
   color: var(--agy-alert-tip) !important;
@@ -978,7 +1129,7 @@ body.agy-review-body table:not(.mtable) > tbody > tr:hover > td,
 
 .markdown-alert.markdown-alert-important {
   border-left-color: var(--agy-alert-important) !important;
-  background: rgba(163, 113, 247, 0.08) !important;
+  background: transparent !important;
 }
 .markdown-alert.markdown-alert-important .markdown-alert-title {
   color: var(--agy-alert-important) !important;
@@ -986,7 +1137,7 @@ body.agy-review-body table:not(.mtable) > tbody > tr:hover > td,
 
 .markdown-alert.markdown-alert-warning {
   border-left-color: var(--agy-alert-warning) !important;
-  background: rgba(210, 153, 34, 0.09) !important;
+  background: transparent !important;
 }
 .markdown-alert.markdown-alert-warning .markdown-alert-title {
   color: var(--agy-alert-warning) !important;
@@ -994,7 +1145,7 @@ body.agy-review-body table:not(.mtable) > tbody > tr:hover > td,
 
 .markdown-alert.markdown-alert-caution {
   border-left-color: var(--agy-alert-caution) !important;
-  background: rgba(248, 81, 73, 0.09) !important;
+  background: transparent !important;
 }
 .markdown-alert.markdown-alert-caution .markdown-alert-title {
   color: var(--agy-alert-caution) !important;
@@ -1070,26 +1221,31 @@ body.agy-review-body img,
 }
 
 .agy-mermaid-container {
-  margin: 0.85rem 0;
-  padding: 1rem;
-  border-radius: 0.75rem;
-  background: var(--agy-secondary);
-  border: 1px solid var(--agy-table-border);
+  margin: 1rem 0;
+  padding: 0;
+  width: fit-content;
+  max-width: 100%;
+  border-radius: 0.5rem;
+  background: var(--agy-mermaid-bg, var(--agy-secondary));
+  border: 1px solid var(--agy-mermaid-border, var(--agy-table-border));
   overflow-x: auto;
   overflow-y: hidden;
-  text-align: center;
+  text-align: left;
 }
 
 .agy-mermaid-container .mermaid {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  min-height: 32px;
+  display: block;
+  width: fit-content;
+  max-width: 100%;
+  min-height: 24px;
 }
 
+.agy-mermaid-container img.agy-mermaid-img,
 .agy-mermaid-container .mermaid svg {
+  display: block;
   max-width: 100%;
   height: auto;
+  border-radius: 0.5rem;
 }
 
 body.agy-review-body pre.mermaid {
@@ -1099,20 +1255,35 @@ body.agy-review-body pre.mermaid {
   font-size: 12px !important;
   padding: 0.75rem 1rem !important;
   margin: 0.75rem 0 !important;
-  border-radius: 0.75rem !important;
+  border-radius: 0.5rem !important;
   background: var(--agy-secondary) !important;
   border: 1px solid var(--agy-table-border) !important;
   overflow-x: auto !important;
 }
 
 .mermaid p,
+.mermaid b,
+.mermaid strong,
+.mermaid i,
+.mermaid em,
+.mermaid a,
+.mermaid .nodeLabel,
 .mermaid .nodeLabel p,
+.mermaid .nodeLabel b,
+.mermaid .nodeLabel strong,
+.mermaid .nodeLabel i,
+.mermaid .nodeLabel em,
 .mermaid .edgeLabel p,
 .mermaid .cluster-label p,
-svg foreignObject p {
+svg foreignObject p,
+svg foreignObject b,
+svg foreignObject strong,
+svg foreignObject i,
+svg foreignObject em {
   margin: 0 !important;
   padding: 0 !important;
   line-height: 1.35 !important;
+  color: inherit !important;
 }
 
 /* --------------------------------------------------------------------------

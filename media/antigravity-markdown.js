@@ -25,11 +25,11 @@
   };
 
   const ALERT_LABELS = {
-    note: "Note",
-    tip: "Tip",
-    important: "Important",
-    warning: "Warning",
-    caution: "Caution"
+    note: "NOTE",
+    tip: "TIP",
+    important: "IMPORTANT",
+    warning: "WARNING",
+    caution: "CAUTION"
   };
 
   function copyToClipboard(text) {
@@ -348,7 +348,7 @@
 
       const titleP = document.createElement("p");
       titleP.className = "markdown-alert-title";
-      titleP.innerHTML = (ALERT_ICONS[type] || "") + ALERT_LABELS[type];
+      titleP.textContent = ALERT_LABELS[type] || type.toUpperCase();
       alertDiv.appendChild(titleP);
 
       if (remainder.trim()) {
@@ -361,6 +361,16 @@
         alertDiv.appendChild(bq.firstChild);
       }
       bq.replaceWith(alertDiv);
+    });
+
+    // Normalize any pre-rendered .markdown-alert-title to Antigravity's clean uppercase label without SVG icons
+    root.querySelectorAll(".markdown-alert > .markdown-alert-title").forEach((titleEl) => {
+      const oct = titleEl.querySelector("svg.octicon");
+      if (oct) oct.remove();
+      const raw = (titleEl.textContent || "").trim();
+      if (raw && raw !== raw.toUpperCase()) {
+        titleEl.textContent = raw.toUpperCase();
+      }
     });
   }
 
@@ -738,8 +748,78 @@
     return out;
   }
 
+  function highlightMarkdownCode(rawCode) {
+    const lines = String(rawCode || "").split("\n");
+    const out = [];
+    let inFence = false;
+    let fenceMarker = "";
+    let fenceLang = "";
+    let fenceBuf = [];
+
+    for (const line of lines) {
+      if (!inFence) {
+        const m = line.match(/^(\s*)(`{3,}|~{3,})([a-zA-Z0-9_+#.-]*)(.*)$/);
+        if (m) {
+          inFence = true;
+          fenceMarker = m[2];
+          fenceLang = (LANG_ALIAS_MAP[m[3].toLowerCase()] || m[3] || "").toLowerCase();
+          fenceBuf = [];
+          const infoHtml = m[3] ? `<span class="hljs-title function_">${escapeHtml(m[3])}</span>` : "";
+          const restHtml = m[4] ? `<span class="hljs-attr">${escapeHtml(m[4])}</span>` : "";
+          out.push(
+            `${escapeHtml(m[1])}<span class="hljs-meta">${escapeHtml(m[2])}</span>${infoHtml}${restHtml}`
+          );
+          continue;
+        }
+        if (/^\s*#{1,6}\s+/.test(line)) {
+          out.push(`<span class="hljs-section">${escapeHtml(line)}</span>`);
+        } else if (/^\s*>\s*\[!(?:NOTE|TIP|IMPORTANT|WARNING|CAUTION)\]/i.test(line)) {
+          out.push(`<span class="hljs-meta">${escapeHtml(line)}</span>`);
+        } else if (/^\s*<!--[\s\S]*?-->\s*$/.test(line)) {
+          out.push(`<span class="hljs-comment">${escapeHtml(line)}</span>`);
+        } else {
+          out.push(
+            escapeHtml(line)
+              .replace(/(`[^`\n]+`)/g, '<span class="hljs-string">$1</span>')
+              .replace(/(\*\*[^*\n]+\*\*)/g, '<span class="hljs-keyword">$1</span>')
+              .replace(
+                /(\[[^\]\n]+\])(\([^)\n]+\))/g,
+                '<span class="hljs-string">$1</span><span class="hljs-attr">$2</span>'
+              )
+          );
+        }
+      } else {
+        const closeRe = new RegExp(`^(\\s*)(${fenceMarker[0]}{${fenceMarker.length},})\\s*$`);
+        const cm = line.match(closeRe);
+        if (cm) {
+          if (fenceBuf.length > 0) {
+            const innerCode = fenceBuf.join("\n");
+            const innerLang = fenceLang || detectUntaggedCodeLang(innerCode);
+            out.push(highlightFallbackPlainCode(innerCode, innerLang));
+          }
+          out.push(`${escapeHtml(cm[1])}<span class="hljs-meta">${escapeHtml(cm[2])}</span>`);
+          inFence = false;
+          fenceMarker = "";
+          fenceLang = "";
+          fenceBuf = [];
+        } else {
+          fenceBuf.push(line);
+        }
+      }
+    }
+    if (inFence && fenceBuf.length > 0) {
+      const innerCode = fenceBuf.join("\n");
+      const innerLang = fenceLang || detectUntaggedCodeLang(innerCode);
+      out.push(highlightFallbackPlainCode(innerCode, innerLang));
+    }
+    return out.join("\n");
+  }
+
   function highlightFallbackPlainCode(rawCode, lang) {
     const raw = String(rawCode || "");
+    if (lang === "markdown" || lang === "md" || lang === "mdx") {
+      return highlightMarkdownCode(raw);
+    }
     if (lang === "diff") {
       return raw
         .split("\n")
@@ -910,7 +990,7 @@
     let html = targetEl.innerHTML || "";
     const hasSpans = /\bclass=["'][^"']*\b(?:hljs-|token\b)/i.test(html);
 
-    if (!hasSpans) {
+    if (!hasSpans || lang === "markdown") {
       const rawText = targetEl.textContent || "";
       const effectiveLang = lang || detectUntaggedCodeLang(rawText);
       html = highlightFallbackPlainCode(rawText, effectiveLang);
@@ -969,8 +1049,12 @@
 
   let mermaidLoadingPromise = null;
   let mermaidRenderSeq = 0;
+  const MERMAID_SVG_CACHE = new Map();
 
   function ensureMermaidLoaded() {
+    if (window.agyMermaid && typeof window.agyMermaid.renderDataUrl === "function") {
+      return Promise.resolve(window.agyMermaid);
+    }
     if (window.mermaid && typeof window.mermaid.render === "function") {
       return Promise.resolve(window.mermaid);
     }
@@ -983,11 +1067,123 @@
     mermaidLoadingPromise = new Promise((resolve) => {
       const script = document.createElement("script");
       script.src = MEDIA_BASE_URI + "mermaid.min.js";
-      script.onload = () => resolve(window.mermaid || null);
+      script.onload = () => resolve(window.agyMermaid || window.mermaid || null);
       script.onerror = () => resolve(null);
       document.head.appendChild(script);
     });
     return mermaidLoadingPromise;
+  }
+
+  function parseRgbToHex(rgbStr) {
+    if (!rgbStr) return null;
+    const s = String(rgbStr).trim();
+    if (/^#[0-9a-fA-F]{6}$/.test(s)) return s.toLowerCase();
+    const m = s.match(
+      /rgba?\(\s*(\d+(?:\.\d+)?)[,\s]+(\d+(?:\.\d+)?)[,\s]+(\d+(?:\.\d+)?)(?:[,\s/]+(\d+(?:\.\d+)?))?/i
+    );
+    if (!m) return null;
+    if (m[4] !== undefined && parseFloat(m[4]) === 0) return null;
+    const r = Math.max(0, Math.min(255, Math.round(parseFloat(m[1]))));
+    const g = Math.max(0, Math.min(255, Math.round(parseFloat(m[2]))));
+    const b = Math.max(0, Math.min(255, Math.round(parseFloat(m[3]))));
+    return (
+      "#" +
+      r.toString(16).padStart(2, "0") +
+      g.toString(16).padStart(2, "0") +
+      b.toString(16).padStart(2, "0")
+    );
+  }
+
+  function mixHexColors(hexA, hexB, weightA) {
+    const a = String(hexA || "#000000").replace("#", "");
+    const b = String(hexB || "#000000").replace("#", "");
+    const rA = parseInt(a.slice(0, 2), 16) || 0;
+    const gA = parseInt(a.slice(2, 4), 16) || 0;
+    const bA = parseInt(a.slice(4, 6), 16) || 0;
+    const rB = parseInt(b.slice(0, 2), 16) || 0;
+    const gB = parseInt(b.slice(2, 4), 16) || 0;
+    const bB = parseInt(b.slice(4, 6), 16) || 0;
+    const w = Math.max(0, Math.min(1, weightA));
+    const r = Math.round(rA * w + rB * (1 - w));
+    const g = Math.round(gA * w + gB * (1 - w));
+    const bl = Math.round(bA * w + bB * (1 - w));
+    return (
+      "#" +
+      r.toString(16).padStart(2, "0") +
+      g.toString(16).padStart(2, "0") +
+      bl.toString(16).padStart(2, "0")
+    );
+  }
+
+  function resolveMermaidThemePalette(refEl, isLight) {
+    const fallbackBg = isLight ? "#f4f2e8" : "#18181b";
+    const fallbackFg = isLight ? "#1e293b" : "#f4f4f5";
+    let bgHex = null;
+    let fgHex = null;
+    let borderHex = null;
+    try {
+      const containerEl =
+        (refEl && refEl.closest && refEl.closest(".agy-mermaid-container")) || refEl;
+      if (containerEl && window.getComputedStyle) {
+        const cs = window.getComputedStyle(containerEl);
+        bgHex = parseRgbToHex(cs.backgroundColor);
+        borderHex = parseRgbToHex(cs.borderTopColor);
+      }
+      if (document.body && window.getComputedStyle) {
+        const bs = window.getComputedStyle(document.body);
+        fgHex = parseRgbToHex(bs.color);
+        if (!bgHex) {
+          const bodyBg = parseRgbToHex(bs.backgroundColor);
+          if (bodyBg) {
+            bgHex = isLight
+              ? mixHexColors(fgHex || fallbackFg, bodyBg, 0.04)
+              : mixHexColors("#000000", bodyBg, 0.2);
+          }
+        }
+      }
+    } catch (_) {}
+
+    const bg = bgHex || fallbackBg;
+    const fg = fgHex || fallbackFg;
+    const line = mixHexColors(fg, bg, isLight ? 0.52 : 0.58);
+    const muted = mixHexColors(fg, bg, isLight ? 0.68 : 0.72);
+    const surface = isLight
+      ? mixHexColors("#ffffff", bg, 0.65)
+      : mixHexColors("#090d12", bg, 0.38);
+    const border = borderHex || mixHexColors(fg, bg, isLight ? 0.24 : 0.32);
+    return {
+      key: `v3:${bg}|${fg}|${border}`,
+      palette: { bg, fg, line, muted, surface, border }
+    };
+  }
+
+  function renderMermaidElementSync(el, src, themeInfo) {
+    const themeKey = themeInfo.key;
+    const cacheKey = "img:v2:" + themeKey + "::" + src;
+    const cachedHtml = MERMAID_SVG_CACHE.get(cacheKey);
+    if (cachedHtml) {
+      el.innerHTML = cachedHtml;
+      el.setAttribute("data-mermaid-rendered", themeKey);
+      return true;
+    }
+    if (window.agyMermaid && typeof window.agyMermaid.renderDataUrl === "function") {
+      try {
+        const res = window.agyMermaid.renderDataUrl(src, themeInfo.palette);
+        if (res && res.dataUrl) {
+          const wAttr = res.width > 0 ? ` width="${Math.round(res.width * 10) / 10}"` : "";
+          const hAttr = res.height > 0 ? ` height="${Math.round(res.height * 10) / 10}"` : "";
+          const imgHtml = `<img class="agy-mermaid-img" decoding="sync" src="${res.dataUrl}" alt="Mermaid diagram"${wAttr}${hAttr} />`;
+          MERMAID_SVG_CACHE.set(cacheKey, imgHtml);
+          el.innerHTML = imgHtml;
+          el.setAttribute("data-mermaid-rendered", themeKey);
+          return true;
+        }
+      } catch (_) {
+        el.setAttribute("data-mermaid-rendered", themeKey);
+        return true;
+      }
+    }
+    return false;
   }
 
   function transformMermaidBlocks(root) {
@@ -1034,53 +1230,58 @@
     });
 
     const isLight = detectThemeIsLight();
-    const desiredTheme = isLight ? "default" : "dark";
-
     const allMermaidNodes = Array.from(scope.querySelectorAll(".mermaid"));
-    const pendingNodes = allMermaidNodes.filter((el) => {
+    if (!allMermaidNodes.length) return;
+
+    const themeInfo = resolveMermaidThemePalette(allMermaidNodes[0], isLight);
+    const pendingNodes = [];
+    allMermaidNodes.forEach((el) => {
       if (!el.getAttribute("data-mermaid-src")) {
         const txt = (el.textContent || "").trim();
         if (txt) {
           el.setAttribute("data-mermaid-src", txt);
         }
       }
-      const src = el.getAttribute("data-mermaid-src") || "";
-      if (!src) return false;
+      const src = (el.getAttribute("data-mermaid-src") || "").trim();
+      if (!src) return;
       const renderedTheme = el.getAttribute("data-mermaid-rendered");
-      const hasSvg = Boolean(el.querySelector("svg"));
-      return !hasSvg || renderedTheme !== desiredTheme;
+      const hasRendered = Boolean(el.querySelector("img.agy-mermaid-img, svg"));
+      if (hasRendered && renderedTheme === themeInfo.key) {
+        MERMAID_SVG_CACHE.set("img:v2:" + themeInfo.key + "::" + src, el.innerHTML);
+        return;
+      }
+      if (renderMermaidElementSync(el, src, themeInfo)) {
+        return;
+      }
+      pendingNodes.push(el);
     });
 
     if (!pendingNodes.length) return;
 
-    ensureMermaidLoaded().then(async (mermaid) => {
-      if (!mermaid) return;
-      try {
-        mermaid.initialize({
-          startOnLoad: false,
-          securityLevel: "loose",
-          theme: desiredTheme,
-          fontFamily:
-            'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
-        });
-      } catch (_) {}
-
+    ensureMermaidLoaded().then(async (engine) => {
+      if (!engine) return;
+      const latestThemeInfo = resolveMermaidThemePalette(pendingNodes[0], detectThemeIsLight());
       for (const el of pendingNodes) {
         const source = (el.getAttribute("data-mermaid-src") || "").trim();
         if (!source) continue;
+        if (renderMermaidElementSync(el, source, latestThemeInfo)) {
+          continue;
+        }
         try {
           const id =
             "agy-mermaid-" +
             ++mermaidRenderSeq +
             "-" +
             Math.random().toString(36).slice(2, 7);
-          const res = await mermaid.render(id, source);
+          const res = await window.mermaid.render(id, source);
           if (res && res.svg) {
+            const cacheKey = "img:v2:" + latestThemeInfo.key + "::" + source;
+            MERMAID_SVG_CACHE.set(cacheKey, res.svg);
             el.innerHTML = res.svg;
-            el.setAttribute("data-mermaid-rendered", desiredTheme);
+            el.setAttribute("data-mermaid-rendered", latestThemeInfo.key);
           }
         } catch (_) {
-          el.setAttribute("data-mermaid-rendered", desiredTheme);
+          el.setAttribute("data-mermaid-rendered", latestThemeInfo.key);
         }
       }
       window.dispatchEvent(new CustomEvent("agy.markdown.layoutChanged"));
@@ -1326,7 +1527,96 @@
     });
   }
 
+  const FILE_ICON_SVGS = {
+    markdown:
+      '<svg class="agy-file-icon" viewBox="0 0 16 16" width="13" height="13" aria-hidden="true" style="color:#3b82f6"><path fill="currentColor" d="M1.5 3.25h2l2.1 3.3 2.1-3.3h2v9.5h-1.9V6.3L5.6 9.5 3.4 6.3v6.45H1.5v-9.5Zm10.7 0h1.8v5.5h1.6l-2.5 3.5-2.5-3.5h1.6v-5.5Z"/></svg>',
+    python:
+      '<svg class="agy-file-icon" viewBox="0 0 16 16" width="13" height="13" aria-hidden="true" style="color:#10b981"><path fill="currentColor" d="M7.9 1.5c-2.5 0-2.8 1.1-2.8 2.4v1.1h2.9v.5H3.9C2.4 5.5 1.5 6.4 1.5 8s.8 2.5 2.2 2.5h1.1V9.3c0-1.1.9-2 2-2h3.3c.9 0 1.6-.7 1.6-1.6V3.9c0-1.4-1.3-2.4-3.8-2.4Zm-1.4 1.3a.6.6 0 1 1 0 1.2.6.6 0 0 1 0-1.2Zm1.6 11.7c2.5 0 2.8-1.1 2.8-2.4V11H8v-.5h4.1c1.5 0 2.4-.9 2.4-2.5s-.8-2.5-2.2-2.5h-1.1v1.2c0 1.1-.9 2-2 2H5.9c-.9 0-1.6.7-1.6 1.6v1.8c0 1.4 1.3 2.4 3.8 2.4Zm1.4-1.3a.6.6 0 1 1 0-1.2.6.6 0 0 1 0 1.2Z"/></svg>',
+    ignore:
+      '<svg class="agy-file-icon" viewBox="0 0 16 16" width="13" height="13" aria-hidden="true" style="color:#64748b"><path fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" d="M3.5 9.5 9.5 3.5M6.5 12.5l6-6M3 13l10-10"/></svg>',
+    license:
+      '<svg class="agy-file-icon" viewBox="0 0 16 16" width="13" height="13" aria-hidden="true" style="color:#64748b"><circle cx="8" cy="8" r="6" fill="none" stroke="currentColor" stroke-width="1.5"/><path fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" d="M10.1 6.2a2.8 2.8 0 1 0 0 3.6"/></svg>',
+    package:
+      '<svg class="agy-file-icon" viewBox="0 0 16 16" width="13" height="13" aria-hidden="true" style="color:#16a34a"><path fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" d="M8 1.8 13.5 5v6L8 14.2 2.5 11V5L8 1.8Z"/><path fill="none" stroke="currentColor" stroke-width="1.3" d="M2.5 5 8 8.2 13.5 5M8 8.2v6"/></svg>',
+    javascript:
+      '<svg class="agy-file-icon" viewBox="0 0 16 16" width="13" height="13" aria-hidden="true" style="color:#cb901d"><path fill="currentColor" d="M6.7 11.2c0 1.4-.8 2.1-2.1 2.1-.7 0-1.3-.2-1.7-.6l.6-1c.3.2.6.4 1 .4.5 0 .8-.3.8-.9V5.2h1.4v6Zm4.5 2.1c-1.2 0-2-.5-2.5-1.2l.9-.8c.4.5.8.8 1.5.8.6 0 1-.3 1-.7 0-.5-.4-.7-1.2-1l-.5-.2c-1.2-.5-1.8-1-1.8-2.1 0-1.2.9-2 2.2-2 1 0 1.7.3 2.1.9l-.9.8c-.3-.4-.7-.6-1.2-.6-.6 0-.9.3-.9.6 0 .4.3.6 1.1.9l.5.2c1.3.5 1.9 1.1 1.9 2.2 0 1.3-1.1 2.2-2.5 2.2Z"/></svg>',
+    typescript:
+      '<svg class="agy-file-icon" viewBox="0 0 16 16" width="13" height="13" aria-hidden="true" style="color:#2563eb"><path fill="currentColor" d="M5.8 6.4v6.6H4.4V6.4H2.4V5.2h5.4v1.2H5.8Zm5.6 6.7c-1.2 0-2-.5-2.5-1.2l.9-.8c.4.5.8.8 1.5.8.6 0 1-.3 1-.7 0-.5-.4-.7-1.2-1l-.5-.2c-1.2-.5-1.8-1-1.8-2.1 0-1.2.9-2 2.2-2 1 0 1.7.3 2.1.9l-.9.8c-.3-.4-.7-.6-1.2-.6-.6 0-.9.3-.9.6 0 .4.3.6 1.1.9l.5.2c1.3.5 1.9 1.1 1.9 2.2 0 1.3-1.1 2.2-2.5 2.2Z"/></svg>',
+    css:
+      '<svg class="agy-file-icon" viewBox="0 0 16 16" width="13" height="13" aria-hidden="true" style="color:#3b82f6"><path fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" d="M5.5 3.2c-1.2 0-1.8.6-1.8 1.7v1.7c0 .8-.5 1.4-1.4 1.4.9 0 1.4.6 1.4 1.4v1.7c0 1.1.6 1.7 1.8 1.7M10.5 3.2c1.2 0 1.8.6 1.8 1.7v1.7c0 .8.5 1.4 1.4 1.4-.9 0-1.4.6-1.4 1.4v1.7c0 1.1-.6 1.7-1.8 1.7"/></svg>',
+    file:
+      '<svg class="agy-file-icon" viewBox="0 0 16 16" width="13" height="13" aria-hidden="true" style="color:#64748b"><path fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" d="M4 2h5.5L13 5.5V14H4V2Z"/><path fill="none" stroke="currentColor" stroke-width="1.3" d="M9.2 2v3.8H13"/></svg>'
+  };
+
+  function getFileIconSvg(label, href) {
+    const cleanHref = String(href || "")
+      .replace(/#.*$/, "")
+      .replace(/\?.*$/, "");
+    const rawName = (
+      cleanHref.split("/").pop() ||
+      String(label || "").trim()
+    ).toLowerCase();
+    if (!rawName) return FILE_ICON_SVGS.file;
+    if (/^license(?:\.[a-z0-9]+)?$/i.test(rawName)) {
+      return FILE_ICON_SVGS.license;
+    }
+    if (
+      /^\.(?:gitignore|vscodeignore|dockerignore|npmignore|eslintignore|prettierignore|gitattributes|editorconfig)$/i.test(
+        rawName
+      )
+    ) {
+      return FILE_ICON_SVGS.ignore;
+    }
+    if (/\.(?:md|markdown|mdx)$/i.test(rawName)) {
+      return FILE_ICON_SVGS.markdown;
+    }
+    if (/\.(?:py|pyi|ipynb)$/i.test(rawName)) {
+      return FILE_ICON_SVGS.python;
+    }
+    if (/\.(?:json|jsonc|jsonl|toml|yaml|yml)$/i.test(rawName)) {
+      return FILE_ICON_SVGS.package;
+    }
+    if (/\.(?:ts|tsx|mts|cts)$/i.test(rawName)) {
+      return FILE_ICON_SVGS.typescript;
+    }
+    if (/\.(?:js|mjs|cjs|jsx)$/i.test(rawName)) {
+      return FILE_ICON_SVGS.javascript;
+    }
+    if (/\.(?:css|less|scss|sass)$/i.test(rawName)) {
+      return FILE_ICON_SVGS.css;
+    }
+    return FILE_ICON_SVGS.file;
+  }
+
   function decorateLinks(root) {
+    // Repair any unparsed [label](file://...) or [label](conversation://...) in DOM blocks
+    const UNPARSED_LINK_RE =
+      /\[(<code\b[^>]*>[^<]*<\/code>|[^\[\]\n<]+)\]\((?:<a\b[^>]*href=["']((?:file|conversation):\/\/[^"']+)["'][^>]*>[\s\S]*?<\/a>|((?:file|conversation):\/\/[^)\s<"']+))\)/gi;
+    root
+      .querySelectorAll(
+        "p:not([data-agy-links-checked='1']), li:not([data-agy-links-checked='1']), td:not([data-agy-links-checked='1']), th:not([data-agy-links-checked='1'])"
+      )
+      .forEach((el) => {
+        el.setAttribute("data-agy-links-checked", "1");
+        if (el.closest("pre")) return;
+        const txt = el.textContent || "";
+        if (!txt.includes("](")) return;
+        const html = el.innerHTML;
+        if (!html || !UNPARSED_LINK_RE.test(html)) return;
+        UNPARSED_LINK_RE.lastIndex = 0;
+        el.innerHTML = html.replace(
+          UNPARSED_LINK_RE,
+          (full, labelHtml, linkedHref, rawHref) => {
+            const href = (linkedHref || rawHref || "").trim();
+            if (!href) return full;
+            const cls = /^conversation:\/\//i.test(href)
+              ? "agy-conv-link"
+              : "agy-file-link";
+            return `<a href="${href}" class="${cls}">${labelHtml}</a>`;
+          }
+        );
+      });
+
     root
       .querySelectorAll("a[href]:not([data-agy-link='1'])")
       .forEach((a) => {
@@ -1335,12 +1625,17 @@
         const href = a.getAttribute("href") || "";
         if (href.startsWith("file://")) {
           a.classList.add("agy-file-link");
+          if (!a.querySelector(".agy-file-icon")) {
+            const iconSvg = getFileIconSvg(a.textContent || "", href);
+            a.insertAdjacentHTML("afterbegin", iconSvg);
+          }
         } else if (href.startsWith("conversation://")) {
           a.classList.add("agy-conv-link");
         }
       });
 
-    // Add 1-click Copy buttons next to Session UUID inline code elements
+    // Remove any legacy injected .agy-uuid-copy-btn buttons and make UUID inline codes click-to-copy directly
+    root.querySelectorAll(".agy-uuid-copy-btn").forEach((btn) => btn.remove());
     root
       .querySelectorAll(":not(pre) > code:not([data-agy-uuid-checked='1'])")
       .forEach((code) => {
@@ -1349,23 +1644,131 @@
         if (!UUID_EXACT_RE.test(text) && !UUID_SHORT_RE.test(text)) return;
         if (code.closest("a")) return;
         const copyUuid = text.replace(/\s*\(current\)$/i, "").replace(/`/g, "");
-        const btn = document.createElement("button");
-        btn.type = "button";
-        btn.className = "agy-uuid-copy-btn";
-        btn.title = "Copy Session ID: " + copyUuid;
-        btn.textContent = "Copy";
-        btn.addEventListener("click", (e) => {
-          e.preventDefault();
+        code.classList.add("agy-uuid-code");
+        code.title = "Click to copy Session ID: " + copyUuid;
+        code.addEventListener("click", (e) => {
           e.stopPropagation();
           copyToClipboard(copyUuid).then(() => {
-            btn.textContent = "✓";
+            code.classList.add("copied");
             setTimeout(() => {
-              btn.textContent = "Copy";
-            }, 1400);
+              code.classList.remove("copied");
+            }, 1200);
           });
         });
-        code.insertAdjacentElement("afterend", btn);
       });
+  }
+
+  function formatDocumentTitle(filePathOrDisplay) {
+    const raw = String(filePathOrDisplay || "").trim();
+    if (!raw) return "Markdown Review";
+    const leftSide = raw.includes("→") ? raw.split("→")[0].trim() : raw;
+    const baseName = leftSide.split(/[\\/]/).pop() || leftSide;
+    const withoutExt = baseName.replace(/\.(?:md|markdown|mdx)$/i, "");
+    if (!withoutExt) return baseName;
+    if (/^[A-Z0-9_-]+$/.test(withoutExt) && /[_-]/.test(withoutExt)) {
+      return withoutExt
+        .split(/[_-]+/)
+        .filter(Boolean)
+        .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+        .join(" ");
+    }
+    return withoutExt;
+  }
+
+  function upgradeToolbarDom() {
+    const toolbar = document.querySelector(".agy-toolbar");
+    if (!toolbar) return;
+
+    toolbar
+      .querySelectorAll(".agy-badge, .agy-badge-brain")
+      .forEach((b) => b.remove());
+
+    const fpEl = toolbar.querySelector(".agy-filepath");
+    if (fpEl) {
+      fpEl.classList.add("agy-doc-title");
+      const rawTitle =
+        fpEl.getAttribute("title") || fpEl.textContent || "";
+      if (rawTitle && !fpEl.getAttribute("title")) {
+        fpEl.setAttribute("title", rawTitle);
+      }
+      const cleanTitle = formatDocumentTitle(rawTitle);
+      if (cleanTitle && fpEl.textContent !== cleanTitle) {
+        fpEl.textContent = cleanTitle;
+      }
+    }
+
+    const actions = toolbar.querySelector(".agy-toolbar-actions");
+    if (!actions || actions.querySelector("#btn-more")) return;
+
+    const btnSplit = actions.querySelector("#btn-split");
+    const btnSync = actions.querySelector("#btn-sync");
+    const btnCopy = actions.querySelector("#btn-copy");
+    const btnEdit = actions.querySelector("#btn-edit");
+    const btnNative = actions.querySelector("#btn-native");
+
+    if (btnSplit) {
+      btnSplit.classList.add("agy-btn-subtle");
+    }
+
+    const menuWrap = document.createElement("div");
+    menuWrap.className = "agy-menu-wrap";
+
+    const btnMore = document.createElement("button");
+    btnMore.type = "button";
+    btnMore.className = "agy-btn-icon";
+    btnMore.id = "btn-more";
+    btnMore.title = "More review actions";
+    btnMore.setAttribute("aria-haspopup", "true");
+    btnMore.setAttribute("aria-expanded", "false");
+    btnMore.innerHTML =
+      '<svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><circle cx="8" cy="3" r="1.35"/><circle cx="8" cy="8" r="1.35"/><circle cx="8" cy="13" r="1.35"/></svg>';
+
+    const moreMenu = document.createElement("div");
+    moreMenu.className = "agy-dropdown-menu";
+    moreMenu.id = "agy-more-menu";
+    moreMenu.hidden = true;
+
+    const closeMenu = () => {
+      moreMenu.hidden = true;
+      btnMore.setAttribute("aria-expanded", "false");
+      btnMore.classList.remove("agy-btn-active");
+    };
+
+    const moveIntoMenu = (btn, labelText) => {
+      if (!btn) return;
+      btn.className = "agy-menu-item";
+      btn.textContent = labelText;
+      btn.addEventListener("click", () => {
+        setTimeout(closeMenu, 10);
+      });
+      moreMenu.appendChild(btn);
+    };
+
+    moveIntoMenu(btnSync, "⇅ Synchronized Scrolling");
+    moveIntoMenu(btnCopy, "Copy Raw Markdown");
+    moveIntoMenu(btnEdit, "Switch to Raw Editor");
+    moveIntoMenu(btnNative, "Native Artifact Viewer ↗");
+
+    btnMore.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const willOpen = moreMenu.hidden;
+      moreMenu.hidden = !willOpen;
+      btnMore.setAttribute("aria-expanded", willOpen ? "true" : "false");
+      btnMore.classList.toggle("agy-btn-active", willOpen);
+    });
+    document.addEventListener("click", (e) => {
+      if (
+        !moreMenu.hidden &&
+        !moreMenu.contains(e.target) &&
+        e.target !== btnMore
+      ) {
+        closeMenu();
+      }
+    });
+
+    menuWrap.appendChild(btnMore);
+    menuWrap.appendChild(moreMenu);
+    actions.appendChild(menuWrap);
   }
 
   let isEnhancing = false;
@@ -1375,6 +1778,7 @@
     isEnhancing = true;
     try {
       syncThemeClass();
+      upgradeToolbarDom();
       ensureKatexStylesLoaded(root);
       ensureHeadingIds(root);
       repairMangledCarousels(root);
@@ -1398,7 +1802,7 @@
   }
 
   window.addEventListener("vscode.markdown.updateContent", () => {
-    setTimeout(enhanceAll, 10);
+    enhanceAll();
   });
 
   // In Custom Editor (body.agy-review-body), DOM content is static until webview update;
