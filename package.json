@@ -2,7 +2,7 @@
   "name": "agy-markdown-review",
   "displayName": "Antigravity Markdown Review",
   "description": "Applies Google Antigravity's Artifact Viewer style (callouts, tables, code blocks, carousels, and file links) to every Markdown review and preview in VS Code.",
-  "version": "1.0.2",
+  "version": "1.1.0",
   "publisher": "iamqazolp",
   "license": "MIT",
   "icon": "media/icon.png",
@@ -103,6 +103,19 @@
       {
         "command": "agyMarkdown.toggleSyncScroll",
         "title": "Antigravity: Toggle Synchronized Scrolling (Raw ↔ Preview)"
+      },
+      {
+        "command": "agyMarkdown.exportPdf",
+        "title": "Antigravity: Export Markdown to PDF…",
+        "icon": "$(file-pdf)"
+      },
+      {
+        "command": "agyMarkdown.exportPdfThemed",
+        "title": "Antigravity: Export Markdown to PDF (Themed)"
+      },
+      {
+        "command": "agyMarkdown.exportPdfUnthemed",
+        "title": "Antigravity: Export Markdown to PDF (Unthemed)"
       }
     ],
     "menus": {

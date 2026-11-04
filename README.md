@@ -73,6 +73,9 @@ class FlashAttentionBlock(nn.Module):
 | :--- | :--- | :--- |
 | `agyMarkdown.openReview` | **Antigravity: Open Markdown Review** | Open the current Markdown file in the Antigravity Review editor |
 | `agyMarkdown.openReviewBeside` | **Antigravity: Open Markdown Review to the Side** | Open the Antigravity Review editor in a side split |
+| `agyMarkdown.exportPdf` | **Antigravity: Export Markdown to PDF…** | Choose between **Themed PDF** (active VS Code theme) and **Unthemed PDF** (clean print white) |
+| `agyMarkdown.exportPdfThemed` | **Antigravity: Export Markdown to PDF (Themed)** | Export a full-bleed PDF preserving your active VS Code theme background, surfaces & syntax colors |
+| `agyMarkdown.exportPdfUnthemed` | **Antigravity: Export Markdown to PDF (Unthemed)** | Export a print-friendly PDF with a crisp white background and high-contrast light syntax palette |
 | `agyMarkdown.editSource` | **Antigravity: Edit Raw Markdown** | Toggle the side-by-side raw Markdown source editor |
 | `agyMarkdown.toggleSyncScroll` | **Antigravity: Toggle Synchronized Scrolling (Raw ↔ Preview)** | Enable or disable bidirectional scroll sync |
 | `agyMarkdown.openNativeArtifactViewer` | **Antigravity: Open in Native Artifact Viewer** | Open a brain artifact in Antigravity's native viewer |

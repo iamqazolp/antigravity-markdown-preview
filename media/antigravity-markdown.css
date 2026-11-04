@@ -113,10 +113,50 @@ body.vscode-high-contrast-light .markdown-preview.markdown-preview,
   --agy-code-hl-line-border: var(--vscode-focusBorder, #0969da);
 }
 
+body.agy-pdf-unthemed,
+body.agy-pdf-unthemed.vscode-light,
+body.agy-pdf-unthemed.vscode-dark {
+  --agy-bg: #ffffff !important;
+  --agy-surface: #f8fafc !important;
+  --agy-fg: #1e293b !important;
+  --agy-heading: #0f172a !important;
+  --agy-muted: #f1f5f9 !important;
+  --agy-muted-fg: #475569 !important;
+  --agy-secondary: #f8fafc !important;
+  --agy-border: #cbd5e1 !important;
+  --agy-table-border: #cbd5e1 !important;
+  --agy-code-fg: #9a3412 !important;
+  --agy-code-bg: #f8fafc !important;
+  --agy-code-header-bg: #f1f5f9 !important;
+  --agy-blockquote-bg: #f8fafc !important;
+  --agy-alert-note: #2563eb !important;
+  --agy-alert-tip: #15803d !important;
+  --agy-alert-important: #7e22ce !important;
+  --agy-alert-warning: #b45309 !important;
+  --agy-alert-caution: #dc2626 !important;
+  --agy-syn-fg: #1e293b !important;
+  --agy-syn-keyword: #d73a49 !important;
+  --agy-syn-type: #0550ae !important;
+  --agy-syn-function: #6f42c1 !important;
+  --agy-syn-string: #b45309 !important;
+  --agy-syn-number: #7c3aed !important;
+  --agy-syn-param: #c2410c !important;
+  --agy-syn-attr: #0369a1 !important;
+  --agy-syn-meta: #c2410c !important;
+  --agy-syn-comment: #64748b !important;
+  --agy-syn-punct: #475569 !important;
+}
+
 @media print {
-  :root,
-  body,
-  .markdown-preview.markdown-preview {
+  *,
+  *::before,
+  *::after {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  body:not(.agy-pdf-themed),
+  .markdown-preview.markdown-preview:not(.agy-pdf-themed) {
     --agy-bg: #ffffff !important;
     --agy-surface: #f8fafc !important;
     --agy-fg: #1e293b !important;
@@ -128,6 +168,8 @@ body.vscode-high-contrast-light .markdown-preview.markdown-preview,
     --agy-table-border: #cbd5e1 !important;
     --agy-code-fg: #9a3412 !important;
     --agy-code-bg: #f8fafc !important;
+    --agy-code-header-bg: #f1f5f9 !important;
+    --agy-blockquote-bg: #f8fafc !important;
     --agy-syn-fg: #1e293b !important;
     --agy-syn-keyword: #d73a49 !important;
     --agy-syn-type: #0550ae !important;
@@ -139,6 +181,36 @@ body.vscode-high-contrast-light .markdown-preview.markdown-preview,
     --agy-syn-meta: #c2410c !important;
     --agy-syn-comment: #64748b !important;
     --agy-syn-punct: #475569 !important;
+  }
+
+  .agy-toolbar,
+  .agy-copy-btn,
+  .agy-carousel-controls {
+    display: none !important;
+  }
+
+  .agy-carousel-slide {
+    display: block !important;
+  }
+
+  .agy-carousel-slide + .agy-carousel-slide {
+    border-top: 1px dashed var(--agy-table-border);
+  }
+
+  h1,
+  h2,
+  h3,
+  h4 {
+    break-after: avoid-page;
+    page-break-after: avoid;
+  }
+
+  .markdown-alert,
+  .agy-mermaid-container,
+  blockquote,
+  tr {
+    break-inside: avoid;
+    page-break-inside: avoid;
   }
 }
 

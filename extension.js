@@ -4,6 +4,9 @@ const vscode = require("vscode");
 const fs = require("fs");
 const path = require("path");
 const os = require("os");
+const { execFile } = require("child_process");
+
+const activeReviewWebviewsByPath = new Map();
 
 const BRAIN_UUID_RE = /\/brain\/([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})\//;
 
@@ -1418,6 +1421,13 @@ class AntigravityMarkdownReviewProvider {
           broadcastSplitState();
         } else if (msg.type === "openNativeArtifact") {
           await openInNativeArtifactViewer(info);
+        } else if (msg.type === "exportPdf") {
+          await exportMarkdownToPdf({
+            info,
+            extensionPath: this.context.extensionPath,
+            mode: msg.mode || "ask",
+            computedVars: msg.computedVars || null
+          });
         } else if (msg.type === "copyRaw") {
           try {
             const raw = fs.readFileSync(info.realPath, "utf8");
@@ -1438,7 +1448,23 @@ class AntigravityMarkdownReviewProvider {
       })
     );
 
+    const panelEntry = {
+      info,
+      webviewPanel,
+      requestExportPdf: (mode) => {
+        webview.postMessage({ type: "requestExportPdf", mode });
+      }
+    };
+    activeReviewWebviewsByPath.set(info.realPath, panelEntry);
+    activeReviewWebviewsByPath.set(info.fsPath, panelEntry);
+
     webviewPanel.onDidDispose(() => {
+      if (activeReviewWebviewsByPath.get(info.realPath) === panelEntry) {
+        activeReviewWebviewsByPath.delete(info.realPath);
+      }
+      if (activeReviewWebviewsByPath.get(info.fsPath) === panelEntry) {
+        activeReviewWebviewsByPath.delete(info.fsPath);
+      }
       for (const d of disposables) {
         try {
           d.dispose();
@@ -2100,6 +2126,401 @@ function buildThemeOverrideCss() {
   return `:root,\nbody.vscode-light,\nbody.vscode-dark,\nbody.vscode-body,\nbody.agy-review-body.vscode-light,\nbody.agy-review-body.vscode-dark,\n.markdown-preview.markdown-preview {\n${vars.join("\n")}\n}`;
 }
 
+function findChromiumExecutable() {
+  const candidates = [];
+  if (process.platform === "darwin") {
+    candidates.push(
+      "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+      "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge",
+      "/Applications/Brave Browser.app/Contents/MacOS/Brave Browser",
+      "/Applications/Chromium.app/Contents/MacOS/Chromium",
+      "/Applications/Google Chrome Canary.app/Contents/MacOS/Google Chrome Canary",
+      path.join(os.homedir(), "Applications/Google Chrome.app/Contents/MacOS/Google Chrome")
+    );
+  } else if (process.platform === "win32") {
+    const pf = process.env["PROGRAMFILES"] || "C:\\Program Files";
+    const pf86 = process.env["PROGRAMFILES(X86)"] || "C:\\Program Files (x86)";
+    const localAppData = process.env["LOCALAPPDATA"] || "";
+    candidates.push(
+      path.join(pf, "Google\\Chrome\\Application\\chrome.exe"),
+      path.join(pf86, "Google\\Chrome\\Application\\chrome.exe"),
+      path.join(pf, "Microsoft\\Edge\\Application\\msedge.exe"),
+      path.join(pf86, "Microsoft\\Edge\\Application\\msedge.exe"),
+      path.join(pf, "BraveSoftware\\Brave-Browser\\Application\\brave.exe")
+    );
+    if (localAppData) {
+      candidates.push(path.join(localAppData, "Google\\Chrome\\Application\\chrome.exe"));
+    }
+  } else {
+    candidates.push(
+      "/usr/bin/google-chrome",
+      "/usr/bin/google-chrome-stable",
+      "/usr/bin/chromium",
+      "/usr/bin/chromium-browser",
+      "/usr/bin/microsoft-edge",
+      "/usr/bin/brave-browser",
+      "/snap/bin/chromium"
+    );
+  }
+  for (const bin of candidates) {
+    try {
+      if (bin && fs.existsSync(bin)) return bin;
+    } catch (_) {}
+  }
+  return null;
+}
+
+function rewriteLocalImageUrisForPdf(html, baseDir, fallbackDir) {
+  return String(html || "").replace(
+    /(<img\b[^>]*?\bsrc=["'])([^"']+)(["'][^>]*>)/gi,
+    (full, prefix, src, suffix) => {
+      const cleanPrefix = prefix.replace(/\s*\bdecoding=["'][^"']*["']/gi, "");
+      const cleanSuffix = suffix.replace(/\s*\bdecoding=["'][^"']*["']/gi, "");
+      const syncPrefix = cleanPrefix.replace(/^<img\b/i, '<img decoding="sync"');
+      if (/^(?:https?:|data:|file:)/i.test(src)) {
+        const ghRawPrefix =
+          "https://raw.githubusercontent.com/iamqazolp/antigravity-markdown-preview/main/";
+        if (src.startsWith(ghRawPrefix)) {
+          const relCandidate = src.slice(ghRawPrefix.length);
+          const localCandidate = resolveLocalAssetPath(relCandidate, baseDir, fallbackDir);
+          if (localCandidate && fs.existsSync(localCandidate)) {
+            const fileUrl = vscode.Uri.file(localCandidate).toString();
+            return `${syncPrefix}${fileUrl}${cleanSuffix}`;
+          }
+        }
+        return `${syncPrefix}${src}${cleanSuffix}`;
+      }
+      const fsPath = resolveLocalAssetPath(src, baseDir, fallbackDir);
+      const fileUrl = vscode.Uri.file(fsPath).toString();
+      return `${syncPrefix}${fileUrl}${cleanSuffix}`;
+    }
+  );
+}
+
+function buildStandaloneThemeVarsCss(isLightTheme, computedVars) {
+  const workbenchCfg = vscode.workspace.getConfiguration("workbench");
+  const themeName = workbenchCfg.get("colorTheme") || "";
+  const themeFile = findThemeFileByName(themeName);
+  const themeData = themeFile
+    ? loadThemeJsonRecursive(themeFile)
+    : { colors: {}, semanticTokenColors: {}, tokenColors: [] };
+  const colors = Object.assign({}, themeData.colors || {});
+
+  const colorCustomizations = workbenchCfg.get("colorCustomizations") || {};
+  if (colorCustomizations && typeof colorCustomizations === "object") {
+    for (const [k, v] of Object.entries(colorCustomizations)) {
+      if (typeof v === "string") colors[k] = v;
+    }
+    const perTheme = colorCustomizations[`[${themeName}]`];
+    if (perTheme && typeof perTheme === "object") {
+      Object.assign(colors, perTheme);
+    }
+  }
+
+  const lines = [];
+  const addCssVar = (name, val) => {
+    if (typeof val === "string" && val.trim()) {
+      lines.push(`  ${name}: ${val.trim()} !important;`);
+    }
+  };
+
+  const edBg = colors["editor.background"] || (isLightTheme ? "#ffffff" : "#18181b");
+  const edFg = colors["editor.foreground"] || (isLightTheme ? "#09090b" : "#f4f4f5");
+  const cellBg =
+    colors["notebook.cellEditorBackground"] ||
+    colors["sideBar.background"] ||
+    colors["panel.background"] ||
+    edBg;
+  const sideBg =
+    colors["sideBar.background"] ||
+    colors["panel.background"] ||
+    colors["editorWidget.background"] ||
+    edBg;
+  const cellBorder =
+    colors["notebook.cellBorderColor"] ||
+    colors["sideBar.border"] ||
+    colors["panel.border"] ||
+    (isLightTheme ? "#d4d4d8" : "#27272a");
+
+  addCssVar("--vscode-editor-background", edBg);
+  addCssVar("--vscode-editor-foreground", edFg);
+  addCssVar("--vscode-notebook-cellEditorBackground", cellBg);
+  addCssVar("--vscode-sideBar-background", sideBg);
+  addCssVar("--vscode-panel-background", colors["panel.background"] || sideBg);
+  addCssVar("--vscode-notebook-cellBorderColor", cellBorder);
+  addCssVar("--vscode-sideBar-border", colors["sideBar.border"] || cellBorder);
+  addCssVar("--agy-bg", edBg);
+  addCssVar("--agy-fg", edFg);
+  addCssVar("--agy-heading", edFg);
+  addCssVar("--agy-theme-well", cellBg);
+  addCssVar("--agy-theme-sidebar", sideBg);
+
+  if (computedVars && typeof computedVars === "object") {
+    for (const [k, v] of Object.entries(computedVars)) {
+      if (k.startsWith("--agy-") && typeof v === "string" && v.trim()) {
+        addCssVar(k, v);
+      }
+    }
+  }
+
+  return `:root,\nbody.agy-review-body,\nbody.agy-pdf-themed {\n${lines.join("\n")}\n}`;
+}
+
+async function exportMarkdownToPdf({ info, extensionPath, mode = "ask", computedVars = null }) {
+  let effectiveMode = mode;
+  if (effectiveMode !== "themed" && effectiveMode !== "unthemed") {
+    const picked = await vscode.window.showQuickPick(
+      [
+        {
+          label: "$(symbol-color) Themed PDF (Active VS Code Theme)",
+          description: "Full-bleed theme background, surface tints & syntax colors",
+          mode: "themed"
+        },
+        {
+          label: "$(file-pdf) Unthemed PDF (Clean Print White)",
+          description: "Standard white background & high-contrast print palette",
+          mode: "unthemed"
+        }
+      ],
+      {
+        placeHolder: "Choose PDF export style"
+      }
+    );
+    if (!picked) return;
+    effectiveMode = picked.mode;
+  }
+
+  const defaultPdfPath = info.fsPath.replace(/\.(?:md|markdown|mdx)$/i, "") + ".pdf";
+  const saveUri = await vscode.window.showSaveDialog({
+    defaultUri: vscode.Uri.file(defaultPdfPath),
+    filters: { "PDF Document": ["pdf"] },
+    saveLabel: effectiveMode === "themed" ? "Export Themed PDF" : "Export Unthemed PDF"
+  });
+  if (!saveUri) return;
+
+  const targetPdfPath = saveUri.fsPath;
+
+  let rawText = "";
+  try {
+    rawText = fs.readFileSync(info.realPath, "utf8");
+  } catch (_) {
+    try {
+      rawText = fs.readFileSync(info.fsPath, "utf8");
+    } catch (_) {
+      vscode.window.showErrorMessage(`Unable to read Markdown file: ${info.fsPath}`);
+      return;
+    }
+  }
+
+  const themeKind = vscode.window.activeColorTheme
+    ? vscode.window.activeColorTheme.kind
+    : vscode.ColorThemeKind.Dark;
+  const isLightTheme =
+    themeKind === vscode.ColorThemeKind.Light ||
+    themeKind === vscode.ColorThemeKind.HighContrastLight;
+
+  let renderedHtml = "";
+  try {
+    renderedHtml = await renderMarkdownWithCarousels(rawText, async (mdChunk) => {
+      return await vscode.commands.executeCommand("markdown.api.render", mdChunk);
+    });
+  } catch (_) {
+    renderedHtml = `<pre>${escapeHtml(rawText)}</pre>`;
+  }
+
+  renderedHtml = rewriteLocalImageUrisForPdf(
+    renderedHtml,
+    path.dirname(info.realPath),
+    path.dirname(info.fsPath)
+  );
+  renderedHtml = renderedHtml.replace(/<details\b(?![^>]*\bopen\b)/gi, "<details open");
+
+  const katexCssFileUrl = vscode.Uri.file(
+    path.join(extensionPath, "media", "katex.min.css")
+  ).toString();
+  const cssFileUrl = vscode.Uri.file(
+    path.join(extensionPath, "media", "antigravity-markdown.css")
+  ).toString();
+  const mermaidJsFileUrl = vscode.Uri.file(
+    path.join(extensionPath, "media", "mermaid.min.js")
+  ).toString();
+  const jsFileUrl = vscode.Uri.file(
+    path.join(extensionPath, "media", "antigravity-markdown.js")
+  ).toString();
+
+  const isThemed = effectiveMode === "themed";
+  const bodyThemeClass = isThemed
+    ? `${isLightTheme ? "vscode-light" : "vscode-dark"} agy-pdf-themed`
+    : "vscode-light agy-pdf-unthemed";
+  const themeCss = isThemed ? buildThemeOverrideCss() : "";
+  const standaloneVarsCss = isThemed
+    ? buildStandaloneThemeVarsCss(isLightTheme, computedVars)
+    : "";
+
+  const pdfLayoutCss = isThemed
+    ? `@page { size: A4; margin: 0; }
+html, body {
+  background-color: var(--agy-bg) !important;
+  color: var(--agy-fg) !important;
+  -webkit-print-color-adjust: exact !important;
+  print-color-adjust: exact !important;
+  margin: 0 !important;
+  padding: 0 !important;
+}
+.agy-pdf-page-bg {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  background-color: var(--agy-bg) !important;
+  z-index: -1;
+  pointer-events: none;
+}
+table.mtable.agy-pdf-frame {
+  width: 100% !important;
+  border-collapse: collapse !important;
+  border: none !important;
+  margin: 0 !important;
+  background: transparent !important;
+}
+table.mtable.agy-pdf-frame > thead > tr > td,
+table.mtable.agy-pdf-frame > tbody > tr > td,
+table.mtable.agy-pdf-frame > tfoot > tr > td {
+  padding: 0 15mm !important;
+  border: none !important;
+  background: transparent !important;
+}
+.agy-pdf-spacer {
+  height: 13mm;
+}
+.agy-review-container {
+  max-width: 100% !important;
+  padding: 0 !important;
+  margin: 0 !important;
+}
+.agy-carousel-controls, .agy-copy-btn {
+  display: none !important;
+}
+.agy-carousel-slide {
+  display: block !important;
+}`
+    : `@page { size: A4; margin: 13mm 15mm; }
+html, body {
+  background-color: #ffffff !important;
+  color: #1e293b !important;
+  -webkit-print-color-adjust: exact !important;
+  print-color-adjust: exact !important;
+  margin: 0 !important;
+  padding: 0 !important;
+}
+.agy-review-container {
+  max-width: 100% !important;
+  padding: 0 !important;
+  margin: 0 !important;
+}
+.agy-carousel-controls, .agy-copy-btn {
+  display: none !important;
+}
+.agy-carousel-slide {
+  display: block !important;
+}`;
+
+  const bodyInner = isThemed
+    ? `<div class="agy-pdf-page-bg"></div>
+  <table class="mtable agy-pdf-frame">
+    <thead><tr><td><div class="agy-pdf-spacer"></div></td></tr></thead>
+    <tbody><tr><td><main class="agy-review-container" id="agy-content">${renderedHtml}</main></td></tr></tbody>
+    <tfoot><tr><td><div class="agy-pdf-spacer"></div></td></tr></tfoot>
+  </table>`
+    : `<main class="agy-review-container" id="agy-content">${renderedHtml}</main>`;
+
+  const docTitle = formatDocumentTitle(info.fsPath);
+  const fullHtml = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <link rel="stylesheet" href="${katexCssFileUrl}" />
+  <link rel="stylesheet" href="${cssFileUrl}" />
+  <style id="agy-theme-palette">${themeCss}</style>
+  <style id="agy-pdf-vars">${standaloneVarsCss}</style>
+  <style id="agy-pdf-layout">${pdfLayoutCss}</style>
+  <title>${escapeHtml(docTitle)}</title>
+</head>
+<body class="agy-review-body ${bodyThemeClass}">
+  ${bodyInner}
+  <script src="${mermaidJsFileUrl}"></script>
+  <script src="${jsFileUrl}"></script>
+</body>
+</html>`;
+
+  const tempHtmlPath = path.join(
+    os.tmpdir(),
+    `agy-pdf-export-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.html`
+  );
+  fs.writeFileSync(tempHtmlPath, fullHtml, "utf8");
+  const tempHtmlUrl = vscode.Uri.file(tempHtmlPath).toString();
+
+  const chromeBin = findChromiumExecutable();
+  if (!chromeBin) {
+    await vscode.env.openExternal(vscode.Uri.file(tempHtmlPath));
+    vscode.window.showInformationMessage(
+      "Opened print-ready Markdown view in your browser (press Cmd+P / Ctrl+P to Save as PDF)."
+    );
+    return;
+  }
+
+  try {
+    await vscode.window.withProgress(
+      {
+        location: vscode.ProgressLocation.Notification,
+        title: `Antigravity: Exporting ${isThemed ? "Themed" : "Unthemed"} PDF…`,
+        cancellable: false
+      },
+      () =>
+        new Promise((resolve, reject) => {
+          execFile(
+            chromeBin,
+            [
+              "--headless",
+              "--disable-gpu",
+              "--no-pdf-header-footer",
+              `--print-to-pdf=${targetPdfPath}`,
+              tempHtmlUrl
+            ],
+            { timeout: 30000 },
+            (err) => {
+              if (err && !fs.existsSync(targetPdfPath)) {
+                reject(err);
+              } else {
+                resolve();
+              }
+            }
+          );
+        })
+    );
+
+    try {
+      fs.unlinkSync(tempHtmlPath);
+    } catch (_) {}
+
+    const action = await vscode.window.showInformationMessage(
+      `Exported ${isThemed ? "Themed" : "Unthemed"} PDF: ${path.basename(targetPdfPath)}`,
+      "Open PDF",
+      "Reveal in Finder"
+    );
+    if (action === "Open PDF") {
+      await vscode.env.openExternal(vscode.Uri.file(targetPdfPath));
+    } else if (action === "Reveal in Finder") {
+      await vscode.commands.executeCommand("revealFileInOS", vscode.Uri.file(targetPdfPath));
+    }
+  } catch (err) {
+    try {
+      fs.unlinkSync(tempHtmlPath);
+    } catch (_) {}
+    vscode.window.showErrorMessage(`PDF export failed: ${err && err.message ? err.message : err}`);
+  }
+}
+
 function buildWebviewHtml({
   cssUri,
   katexCssUri,
@@ -2149,6 +2570,8 @@ function buildWebviewHtml({
         </button>
         <div class="agy-dropdown-menu" id="agy-more-menu" hidden>
           <button type="button" class="agy-menu-item" id="btn-sync"><span>⇅ Synchronized Scrolling</span><span class="agy-menu-check" id="sync-check">${syncScrollEnabled ? "✓" : ""}</span></button>
+          <button type="button" class="agy-menu-item" id="btn-export-pdf-themed" title="Export PDF preserving your active VS Code theme background and syntax palette"><span>Export PDF (Themed)</span></button>
+          <button type="button" class="agy-menu-item" id="btn-export-pdf-unthemed" title="Export print-friendly PDF with a clean white background"><span>Export PDF (Unthemed)</span></button>
           <button type="button" class="agy-menu-item" id="btn-copy"><span>Copy Raw Markdown</span></button>
           <button type="button" class="agy-menu-item" id="btn-edit"><span>Switch to Raw Editor</span></button>
           ${nativeMenuItem}
@@ -2168,6 +2591,8 @@ function buildWebviewHtml({
       const btnSplit = document.getElementById("btn-split");
       const btnCopy = document.getElementById("btn-copy");
       const btnNative = document.getElementById("btn-native");
+      const btnExportPdfThemed = document.getElementById("btn-export-pdf-themed");
+      const btnExportPdfUnthemed = document.getElementById("btn-export-pdf-unthemed");
       const btnSync = document.getElementById("btn-sync");
       const btnSyncInline = document.getElementById("btn-sync-inline");
       const syncCheckEl = document.getElementById("sync-check");
@@ -2576,6 +3001,78 @@ function buildWebviewHtml({
         });
       }
 
+      const AGY_PDF_VARS = [
+        "--agy-bg",
+        "--agy-surface",
+        "--agy-fg",
+        "--agy-heading",
+        "--agy-muted",
+        "--agy-muted-fg",
+        "--agy-secondary",
+        "--agy-border",
+        "--agy-table-border",
+        "--agy-code-fg",
+        "--agy-code-bg",
+        "--agy-code-header-bg",
+        "--agy-blockquote-bg",
+        "--agy-alert-note",
+        "--agy-alert-tip",
+        "--agy-alert-important",
+        "--agy-alert-warning",
+        "--agy-alert-caution",
+        "--agy-syn-fg",
+        "--agy-syn-keyword",
+        "--agy-syn-type",
+        "--agy-syn-function",
+        "--agy-syn-string",
+        "--agy-syn-number",
+        "--agy-syn-param",
+        "--agy-syn-attr",
+        "--agy-syn-meta",
+        "--agy-syn-comment",
+        "--agy-syn-punct",
+        "--agy-syn-add-bg",
+        "--agy-syn-add-fg",
+        "--agy-syn-del-bg",
+        "--agy-syn-del-fg",
+        "--agy-code-hl-line-bg",
+        "--agy-code-hl-line-border"
+      ];
+
+      function collectComputedThemeVars() {
+        const out = {};
+        if (!document.body || !window.getComputedStyle) return out;
+        const cs = window.getComputedStyle(document.body);
+        for (const name of AGY_PDF_VARS) {
+          const val = cs.getPropertyValue(name);
+          if (val && val.trim()) {
+            out[name] = val.trim();
+          }
+        }
+        return out;
+      }
+
+      if (btnExportPdfThemed) {
+        btnExportPdfThemed.addEventListener("click", () => {
+          closeMoreMenu();
+          vscode.postMessage({
+            type: "exportPdf",
+            mode: "themed",
+            computedVars: collectComputedThemeVars()
+          });
+        });
+      }
+      if (btnExportPdfUnthemed) {
+        btnExportPdfUnthemed.addEventListener("click", () => {
+          closeMoreMenu();
+          vscode.postMessage({
+            type: "exportPdf",
+            mode: "unthemed",
+            computedVars: collectComputedThemeVars()
+          });
+        });
+      }
+
       function applyThemeClass(isLight, themeCss) {
         if (!document.body) return;
         document.body.classList.toggle("vscode-light", Boolean(isLight));
@@ -2662,6 +3159,14 @@ function buildWebviewHtml({
         if (msg.type === "updateSplitState") {
           isSplitOpen = Boolean(msg.isOpen);
           updateSplitButtonUi();
+          return;
+        }
+        if (msg.type === "requestExportPdf") {
+          vscode.postMessage({
+            type: "exportPdf",
+            mode: msg.mode || "ask",
+            computedVars: collectComputedThemeVars()
+          });
           return;
         }
         if (msg.type === "updateTheme") {
@@ -2948,6 +3453,38 @@ function extendMarkdownItWithAntigravity(md) {
   return md;
 }
 
+async function triggerExportPdfCommand(uri, mode, extensionPath) {
+  let targetUri = uri instanceof vscode.Uri ? uri : null;
+  if (!targetUri && vscode.window.tabGroups && vscode.window.tabGroups.activeTabGroup) {
+    const activeTab = vscode.window.tabGroups.activeTabGroup.activeTab;
+    const input = activeTab && activeTab.input;
+    if (input && input.uri) {
+      targetUri = input.uri;
+    }
+  }
+  if (!targetUri && vscode.window.activeTextEditor) {
+    targetUri = vscode.window.activeTextEditor.document.uri;
+  }
+  if (!targetUri) {
+    vscode.window.showInformationMessage("Open a Markdown file first to export to PDF.");
+    return;
+  }
+  const info = resolveRealFileInfo(targetUri);
+  const activePanel =
+    activeReviewWebviewsByPath.get(info.realPath) ||
+    activeReviewWebviewsByPath.get(info.fsPath);
+  if (activePanel && typeof activePanel.requestExportPdf === "function") {
+    activePanel.requestExportPdf(mode);
+    return;
+  }
+  await exportMarkdownToPdf({
+    info,
+    extensionPath,
+    mode,
+    computedVars: null
+  });
+}
+
 function activate(context) {
   const provider = new AntigravityMarkdownReviewProvider(context);
 
@@ -3055,6 +3592,15 @@ function activate(context) {
         `Antigravity: Synchronized scrolling ${!current ? "enabled" : "disabled"}`,
         2500
       );
+    }),
+    vscode.commands.registerCommand("agyMarkdown.exportPdf", async (uri) => {
+      await triggerExportPdfCommand(uri, "ask", context.extensionPath);
+    }),
+    vscode.commands.registerCommand("agyMarkdown.exportPdfThemed", async (uri) => {
+      await triggerExportPdfCommand(uri, "themed", context.extensionPath);
+    }),
+    vscode.commands.registerCommand("agyMarkdown.exportPdfUnthemed", async (uri) => {
+      await triggerExportPdfCommand(uri, "unthemed", context.extensionPath);
     })
   );
 

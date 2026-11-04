@@ -2,6 +2,14 @@
 
 All notable changes to the **Antigravity Markdown Review** (`agy-markdown-review`) extension will be documented in this file.
 
+## [1.1.0] - 2026-11-05
+
+### Added
+- **PDF Export — Themed & Unthemed (`agyMarkdown.exportPdf`, `agyMarkdown.exportPdfThemed`, `agyMarkdown.exportPdfUnthemed`)**:
+  - **Export PDF (Themed)**: Full-bleed vector PDF preserving the active VS Code theme's exact background color, surface tints, and syntax highlighting palette across every page, including rendered Mermaid diagrams and KaTeX math.
+  - **Export PDF (Unthemed)**: Print-friendly vector PDF with a clean white background, crisp slate code blocks, and high-contrast light syntax highlighting.
+  - Accessible directly from the review toolbar `⋮` menu (**Export PDF (Themed)** / **Export PDF (Unthemed)**) and the Command Palette.
+
 ## [1.0.1] - 2026-11-05
 
 ### Fixed
