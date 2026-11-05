@@ -35,10 +35,15 @@ def install_extension(repo_root: Path) -> list[Path]:
         if idx > 0 and not root.exists():
             continue
         root.mkdir(parents=True, exist_ok=True)
-        for old_dir in root.glob(f"{EXT_ID}-*"):
-            if old_dir.is_dir():
-                shutil.rmtree(old_dir)
         target = root / ext_dir_name
+        previous_names: list[str] = []
+        for old_dir in root.glob(f"{EXT_ID}-*"):
+            if old_dir.name != ext_dir_name:
+                previous_names.append(old_dir.name)
+            if old_dir.is_symlink():
+                old_dir.unlink()
+            elif old_dir.is_dir():
+                shutil.rmtree(old_dir)
         target.mkdir(parents=True, exist_ok=True)
 
         for item_name in COPY_ITEMS:
@@ -54,6 +59,14 @@ def install_extension(repo_root: Path) -> list[Path]:
                 )
             else:
                 shutil.copy2(src, dst)
+
+        for prev_name in previous_names:
+            prev_link = root / prev_name
+            if not prev_link.exists() and not prev_link.is_symlink():
+                try:
+                    prev_link.symlink_to(target)
+                except Exception:
+                    pass
 
         installed_paths.append(target)
 
