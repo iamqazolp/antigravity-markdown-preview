@@ -1,6 +1,29 @@
 # Change Log
 
-All notable changes to the **Antigravity Markdown Review** (`agy-markdown-review`) extension will be documented in this file.
+All notable changes to the **Antigravity Document Preview** (`iamqazolp.agy-markdown-review`, formerly *Antigravity Markdown Review*) extension will be documented in this file.
+
+## [1.3.0] - 2026-11-05
+
+### Added
+- **Rebranded to "Antigravity Document Preview" + Smart Document Naming**:
+  - Updated display name, editor tab title, and command titles to **Antigravity Document Preview** while preserving the Marketplace extension ID (`iamqazolp.agy-markdown-review`) and custom editor `viewType` (`antigravity.markdownReview`) for 100% backward compatibility.
+  - Added a color-coded **format badge** (`MD`, `MDX`, `QMD`, `RMD`, `HTML`, `SVG`, `MMD`, `CSV`, `TSV`, `JSONL`) and filename chip in the top preview toolbar.
+  - Upgraded `formatDocumentTitle()` to extract titles from YAML frontmatter (`title:`) or HTML `<title>`, preserve common acronyms (`README`, `API`, `HTML`, `CSS`, `SVG`, `JSONL`, `CSV`, `LLM`, `GPU`, `PDF`, `UI`, `CLI`, etc.), and format kebab/snake-case filenames cleanly.
+- **HTML Document Preview Studio (`.html`, `.htm`)**:
+  - **🌐 Web View**: Sandboxed live preview iframe with automatic local asset (`<img>`, `<link>`, `<script>`) resolution, canvas background switcher (`Auto` / `Light` / `Dark`), responsive viewport width presets (`100%`, `1024px`, `768px`, `390px`), `↗ Browser` launcher, and scroll synchronization with Split Edit.
+  - **✨ Reader View**: Renders HTML body content with Antigravity typography, callouts, tables, and syntax-highlighted code blocks.
+  - **</> Source View**: Full syntax-highlighted HTML source with line numbers.
+- **MDX, Quarto & R Markdown Support (`.mdx`, `.qmd`, `.rmd`)**:
+  - Parses YAML frontmatter (`--- ... ---`) into a structured metadata header card (`title`, `author`, `date`, `tags`, `format`, etc.).
+  - Supports Quarto/RMD executable code chunks (```` ```{python} ````, ```` ```{r} ````, ```` ```{mermaid} ````) with `#| label:` / `#| fig-cap:` chunk options and Quarto `::: {.callout-note}` blocks.
+  - Supports MDX `import` / `export` module blocks and `<Note>`, `<Tip>`, `<Important>`, `<Warning>`, `<Caution>`, and `<Callout>` JSX components.
+- **Standalone SVG (`.svg`) & Mermaid (`.mmd`, `.mermaid`) Vector Studios**:
+  - Interactive pan/zoom canvas (`0.25x`–`8x`), surface background switcher (`Checkerboard` transparency grid, `Theme`, `Light`, `Dark`), dimension & node/diagram metadata badges, `Copy SVG`, `Copy Data URI`, fullscreen Lightbox, and collapsible syntax-highlighted source.
+- **CSV / TSV Data Table Studio (`.csv`, `.tsv`)**:
+  - RFC-4180 parser with sticky headers, live row filter search box, clickable sortable columns (`▲`/`▼`), numeric & boolean cell formatting, row number gutter with `data-line` sync, `Copy MD`, and `Copy CSV`.
+- **JSONL & Antigravity Conversation Transcript Studio (`.jsonl`, `.ndjson`)**:
+  - Automatically detects **Antigravity Conversation Transcripts** (`step_index`, `source`, `type`, `content`, `thinking`, `tool_calls`) vs generic JSONL datasets.
+  - Renders role-colored step cards (`USER`, `PLANNER`, `TOOL`, `SYSTEM`), filter pills (`All`, `💬 User`, `🤖 Planner`, `🔧 Tools`, `⚠️ Errors`), live text search, `Expand All` toggle, and per-step `Copy JSON`.
 
 ## [1.2.0] - 2026-11-05
 

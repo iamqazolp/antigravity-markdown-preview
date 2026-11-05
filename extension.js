@@ -8,15 +8,57 @@ const crypto = require("crypto");
 const https = require("https");
 const { execFile } = require("child_process");
 
+const EXTENSION_ID = "iamqazolp.agy-markdown-review";
+const EXTENSION_VERSION = "1.3.0";
 const GITHUB_REPO_URL = "https://github.com/iamqazolp/antigravity-markdown-preview";
+const GITHUB_ISSUES_URL = "https://github.com/iamqazolp/antigravity-markdown-preview/issues";
 const MARKETPLACE_ITEM_URL =
   "https://marketplace.visualstudio.com/items?itemName=iamqazolp.agy-markdown-review";
+const MARKETPLACE_URL = MARKETPLACE_ITEM_URL;
 const AUTHOR_USERNAMES = new Set(["iamqazolp"]);
+
+const SUPPORTED_DOC_EXT_RE =
+  /\.(?:md|markdown|mdx|qmd|rmd|html|htm|svg|mmd|mermaid|csv|tsv|jsonl|ndjson)$/i;
+
+const DOC_FORMAT_BY_EXT = {
+  ".md": { id: "markdown", badge: "MD", label: "Markdown", family: "markdown" },
+  ".markdown": { id: "markdown", badge: "MD", label: "Markdown", family: "markdown" },
+  ".mdx": { id: "mdx", badge: "MDX", label: "MDX Document", family: "markdown" },
+  ".qmd": { id: "qmd", badge: "QMD", label: "Quarto Markdown", family: "markdown" },
+  ".rmd": { id: "rmd", badge: "RMD", label: "R Markdown", family: "markdown" },
+  ".html": { id: "html", badge: "HTML", label: "HTML Document", family: "html" },
+  ".htm": { id: "html", badge: "HTML", label: "HTML Document", family: "html" },
+  ".svg": { id: "svg", badge: "SVG", label: "SVG Vector Graphic", family: "svg" },
+  ".mmd": { id: "mermaid", badge: "MERMAID", label: "Mermaid Diagram", family: "mermaid" },
+  ".mermaid": { id: "mermaid", badge: "MERMAID", label: "Mermaid Diagram", family: "mermaid" },
+  ".csv": { id: "csv", badge: "CSV", label: "CSV Data Table", family: "table" },
+  ".tsv": { id: "tsv", badge: "TSV", label: "TSV Data Table", family: "table" },
+  ".jsonl": { id: "jsonl", badge: "JSONL", label: "JSONL / Transcript", family: "jsonl" },
+  ".ndjson": { id: "jsonl", badge: "NDJSON", label: "NDJSON Dataset", family: "jsonl" }
+};
+
+const ACRONYM_UPPER_SET = new Set([
+  "md", "mdx", "qmd", "rmd", "html", "htm", "css", "js", "ts", "jsx", "tsx",
+  "json", "jsonl", "ndjson", "yaml", "yml", "toml", "csv", "tsv", "svg", "pdf",
+  "png", "jpg", "jpeg", "gif", "webp", "api", "cli", "gui", "ui", "ux", "ide",
+  "sdk", "llm", "ai", "ml", "dl", "nlp", "gpu", "cpu", "tpu", "cuda", "ptx",
+  "sql", "db", "url", "uri", "uuid", "id", "toc", "faq", "readme", "changelog",
+  "license", "todo", "wip", "pr", "ci", "cd", "aws", "gcp", "os", "io", "mcp",
+  "agy", "vscode", "vsix", "http", "https", "ssh", "tls", "ssl", "jwt", "oauth",
+  "rgb", "rgba", "hsl", "dom", "xml", "ast", "ir", "jit", "wasm", "rag", "rlhf"
+]);
+
+function detectDocumentFormat(filePath) {
+  const ext = path.extname(String(filePath || "")).toLowerCase();
+  const base = DOC_FORMAT_BY_EXT[ext] || DOC_FORMAT_BY_EXT[".md"];
+  return Object.assign({ ext: ext || ".md" }, base);
+}
 
 const activeReviewWebviewsByPath = new Map();
 let telemetryLogger = null;
 let telemetryOutputChannel = null;
 let isExcludedAuthorEnv = false;
+let isAuthorEnvironment = false;
 
 function detectIsAuthorEnvironment(context) {
   try {
@@ -51,7 +93,8 @@ function getAnonymousDistinctId() {
 
 function initTelemetry(context) {
   isExcludedAuthorEnv = detectIsAuthorEnvironment(context);
-  telemetryOutputChannel = vscode.window.createOutputChannel("Antigravity Markdown Review");
+  isAuthorEnvironment = isExcludedAuthorEnv;
+  telemetryOutputChannel = vscode.window.createOutputChannel("Antigravity Document Preview");
   context.subscriptions.push(telemetryOutputChannel);
 
   const extVersion =
@@ -59,7 +102,7 @@ function initTelemetry(context) {
       context.extension &&
       context.extension.packageJSON &&
       context.extension.packageJSON.version) ||
-    "1.1.1";
+    EXTENSION_VERSION;
 
   const sender = {
     sendEventData(eventName, data) {
@@ -150,13 +193,64 @@ const ALERT_LABELS = {
   caution: "CAUTION"
 };
 
-function formatDocumentTitle(filePath) {
-  const base = path.basename(String(filePath || "")).replace(/\.(?:md|markdown|mdx)$/i, "");
-  if (!base) return "Markdown Review";
-  return base
+function smartTitleWord(word) {
+  if (!word) return "";
+  const lower = word.toLowerCase();
+  if (ACRONYM_UPPER_SET.has(lower)) {
+    return lower === "vscode" ? "VS Code" : lower.toUpperCase();
+  }
+  if (/^v\d+(?:\.\d+)+[a-z0-9-]*$/i.test(word)) {
+    return word;
+  }
+  // Preserve intentional mixed case (e.g. Antigravity, PyTorch, GitHub, FastAPI)
+  if (/[a-z]/.test(word) && /[A-Z]/.test(word.slice(1))) {
+    return word;
+  }
+  return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase();
+}
+
+function formatDocumentTitle(filePath, rawText = "") {
+  const leftSide = String(filePath || "").includes("→")
+    ? String(filePath || "").split("→")[0].trim()
+    : String(filePath || "");
+  const baseName = path.basename(leftSide);
+  const withoutExt = baseName.replace(SUPPORTED_DOC_EXT_RE, "");
+
+  if (typeof rawText === "string" && rawText.trim()) {
+    const fmMatch = rawText.match(/^---\r?\n([\s\S]*?)\r?\n---[ \t]*(?:\r?\n|$)/);
+    if (fmMatch) {
+      const titleLine = fmMatch[1].match(/^[ \t]*title[ \t]*:[ \t]*(.+)$/m);
+      if (titleLine) {
+        const cleaned = titleLine[1]
+          .trim()
+          .replace(/^["']|["']$/g, "")
+          .trim();
+        if (cleaned && cleaned.length <= 96) {
+          return cleaned;
+        }
+      }
+    }
+    if (/\.html?$/i.test(baseName)) {
+      const htmlTitle = rawText.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
+      if (htmlTitle) {
+        const cleaned = decodeHtmlEntities(htmlTitle[1].replace(/\s+/g, " ").trim());
+        if (
+          cleaned &&
+          cleaned.length <= 96 &&
+          !/^(?:document|untitled|index|page)$/i.test(cleaned)
+        ) {
+          return cleaned;
+        }
+      }
+    }
+  }
+
+  if (!withoutExt) return baseName || "Document Preview";
+  const spaced = withoutExt.replace(/([a-z0-9])([A-Z])/g, "$1 $2");
+  return spaced
     .split(/[_-\s]+/)
     .filter(Boolean)
-    .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+    .map(smartTitleWord)
     .join(" ");
 }
 
@@ -178,12 +272,14 @@ function resolveRealFileInfo(uri) {
   const normalized = realPath.replace(/\\/g, "/");
   const match = normalized.match(BRAIN_UUID_RE);
   const cascadeId = match ? match[1] : null;
+  const format = detectDocumentFormat(fsPath || realPath);
   return {
     fsPath,
     realPath,
     isSymlink,
     cascadeId,
-    isBrainArtifact: Boolean(cascadeId)
+    isBrainArtifact: Boolean(cascadeId),
+    format
   };
 }
 
@@ -271,6 +367,169 @@ function recordEditorPosition(editor) {
   lastEditorLineByPath.set(info.realPath, line);
 }
 
+function parseSimpleYamlFrontmatter(yamlText) {
+  const entries = [];
+  const lines = String(yamlText || "").split(/\r?\n/);
+  let currentKey = null;
+  let currentList = null;
+
+  const flushList = () => {
+    if (currentKey && currentList && currentList.length > 0) {
+      entries.push({ key: currentKey, value: currentList, isList: true });
+    }
+    currentKey = null;
+    currentList = null;
+  };
+
+  for (const rawLine of lines) {
+    const trimmed = rawLine.trim();
+    if (!trimmed || trimmed.startsWith("#")) continue;
+    const listItemMatch = rawLine.match(/^[ \t]+-[ \t]+(.+)$/);
+    if (listItemMatch && currentKey) {
+      if (!currentList) currentList = [];
+      currentList.push(listItemMatch[1].trim().replace(/^["']|["']$/g, ""));
+      continue;
+    }
+    flushList();
+    const kvMatch = rawLine.match(/^([a-zA-Z0-9_.-]+)[ \t]*:[ \t]*(.*)$/);
+    if (!kvMatch) continue;
+    const key = kvMatch[1].trim();
+    const rawVal = kvMatch[2].trim();
+    if (!rawVal) {
+      currentKey = key;
+      currentList = [];
+      continue;
+    }
+    if (rawVal.startsWith("[") && rawVal.endsWith("]")) {
+      const items = rawVal
+        .slice(1, -1)
+        .split(",")
+        .map((s) => s.trim().replace(/^["']|["']$/g, ""))
+        .filter(Boolean);
+      entries.push({ key, value: items, isList: true });
+    } else {
+      entries.push({
+        key,
+        value: rawVal.replace(/^["']|["']$/g, ""),
+        isList: false
+      });
+    }
+  }
+  flushList();
+  return entries;
+}
+
+function buildFrontmatterCardHtml(yamlText, startLine, endLine, formatInfo) {
+  const entries = parseSimpleYamlFrontmatter(yamlText);
+  const badgeLabel =
+    formatInfo && formatInfo.id !== "markdown"
+      ? `${formatInfo.badge} FRONTMATTER`
+      : "FRONTMATTER";
+  const rowsHtml = entries
+    .map((e) => {
+      if (e.isList && Array.isArray(e.value)) {
+        const pills = e.value
+          .map((item) => `<span class="agy-fm-tag">${escapeHtml(item)}</span>`)
+          .join("");
+        return `<div class="agy-fm-row"><span class="agy-fm-key">${escapeHtml(e.key)}</span><span class="agy-fm-val agy-fm-tags">${pills}</span></div>`;
+      }
+      return `<div class="agy-fm-row"><span class="agy-fm-key">${escapeHtml(e.key)}</span><span class="agy-fm-val">${escapeHtml(String(e.value))}</span></div>`;
+    })
+    .join("");
+  const highlightedYaml = highlightFallbackPlainCode(yamlText.trim(), "yaml");
+  return (
+    `<div class="agy-frontmatter-card code-line" data-line="${startLine}" data-line-end="${endLine}">` +
+    `<div class="agy-frontmatter-header">` +
+    `<span class="agy-frontmatter-badge">${escapeHtml(badgeLabel)}</span>` +
+    `<details class="agy-frontmatter-raw"><summary>YAML Source</summary><pre><code class="language-yaml" data-agy-highlighted="1">${highlightedYaml}</code></pre></details>` +
+    `</div>` +
+    (rowsHtml ? `<div class="agy-frontmatter-grid">${rowsHtml}</div>` : "") +
+    `</div>`
+  );
+}
+
+function preprocessMarkdownVariants(srcText, formatInfo) {
+  let text = String(srcText || "");
+  const injectedBlocks = [];
+
+  // 1. YAML Frontmatter at top of document (--- ... ---)
+  const fmMatch = text.match(/^---[ \t]*\r?\n([\s\S]*?)\r?\n---[ \t]*(?:\r?\n|$)/);
+  if (fmMatch) {
+    const fullMatch = fmMatch[0];
+    const yamlBody = fmMatch[1];
+    const newlineCount = (fullMatch.match(/\n/g) || []).length;
+    const endLine = Math.max(1, newlineCount);
+    const idx = injectedBlocks.length;
+    injectedBlocks.push(buildFrontmatterCardHtml(yamlBody, 0, endLine, formatInfo));
+    text = `<div data-agy-injected-block="${idx}"></div>` + "\n".repeat(newlineCount) + text.slice(fullMatch.length);
+  }
+
+  // 2. Quarto / Pandoc Callout Blocks: ::: {.callout-note title="..."} ... :::
+  text = text.replace(
+    /^[ \t]*:::[ \t]*\{\.callout-(note|tip|important|warning|caution)([^}]*)\}[ \t]*\r?\n([\s\S]*?)\r?\n[ \t]*:::[ \t]*(?=\r?\n|$)/gim,
+    (_full, rawType, attrs, inner) => {
+      const alertType = rawType.toUpperCase();
+      const titleMatch = (attrs || "").match(/\btitle=["']([^"']+)["']/i);
+      const innerLines = inner.split(/\r?\n/);
+      const quoted = innerLines.map((l) => `> ${l}`).join("\n");
+      const headerSuffix = titleMatch ? ` **${titleMatch[1].trim()}**` : "";
+      return `> [!${alertType}]${headerSuffix}\n${quoted}`;
+    }
+  );
+
+  // 3. MDX top-level import/export statements & JSX Callout/Card components
+  const isMdx = formatInfo && formatInfo.id === "mdx";
+  if (isMdx || /^import\s+.+\s+from\s+["'][^"']+["']/m.test(text)) {
+    // Collapse contiguous top-level import/export lines (outside code fences) into an MDX Module badge card
+    text = text.replace(
+      /(?:^[ \t]*(?:import\s+[\s\S]*?from\s+["'][^"']+["']\s*;?|export\s+(?:const|let|var|function|default)\s+[^\n]+)[ \t]*\r?\n)+/gm,
+      (blockMatch, offset) => {
+        const before = text.slice(0, offset);
+        const fenceCount = (before.match(/^[ \t]*(?:`{3,}|~{3,})/gm) || []).length;
+        if (fenceCount % 2 === 1) return blockMatch;
+        const startLine = before.split("\n").length - 1;
+        const newlineCount = (blockMatch.match(/\n/g) || []).length;
+        const endLine = startLine + Math.max(1, newlineCount);
+        const trimmedCode = blockMatch.trim();
+        const highlighted = highlightFallbackPlainCode(trimmedCode, "typescript");
+        const idx = injectedBlocks.length;
+        injectedBlocks.push(
+          `<details class="agy-mdx-imports-card code-line" data-line="${startLine}" data-line-end="${endLine}">` +
+            `<summary><span class="agy-frontmatter-badge">MDX MODULE</span> <code>${escapeHtml(
+              trimmedCode.split(/\r?\n/)[0].slice(0, 72)
+            )}${trimmedCode.includes("\n") ? " …" : ""}</code></summary>` +
+            `<pre><code class="language-tsx" data-agy-highlighted="1">${highlighted}</code></pre>` +
+            `</details>`
+        );
+        return `<div data-agy-injected-block="${idx}"></div>` + "\n".repeat(newlineCount);
+      }
+    );
+  }
+
+  // Convert MDX <Note>, <Tip>, <Important>, <Warning>, <Caution>, <Callout type="..."> tags
+  text = text.replace(
+    /<(Note|Tip|Important|Warning|Caution|Info)\b[^>]*>([\s\S]*?)<\/\1>/gi,
+    (_full, tag, inner) => {
+      const mapType = tag.toLowerCase() === "info" ? "NOTE" : tag.toUpperCase();
+      const lines = inner.trim().split(/\r?\n/);
+      return `> [!${mapType}]\n` + lines.map((l) => `> ${l}`).join("\n");
+    }
+  );
+  text = text.replace(
+    /<Callout\b([^>]*)>([\s\S]*?)<\/Callout>/gi,
+    (_full, attrs, inner) => {
+      const tMatch = (attrs || "").match(/\btype=["'](note|tip|important|warning|caution|info|error)["']/i);
+      const rawT = tMatch ? tMatch[1].toLowerCase() : "note";
+      const mapType =
+        rawT === "info" ? "NOTE" : rawT === "error" ? "CAUTION" : rawT.toUpperCase();
+      const lines = inner.trim().split(/\r?\n/);
+      return `> [!${mapType}]\n` + lines.map((l) => `> ${l}`).join("\n");
+    }
+  );
+
+  return { text, injectedBlocks };
+}
+
 function preprocessMarkdownCodeFences(mdText) {
   const fenceMetaByLine = new Map();
   const src = String(mdText || "");
@@ -280,6 +539,10 @@ function preprocessMarkdownCodeFences(mdText) {
       const trimmedInfo = (infoStr || "").trim();
       if (/^(?:carousel|mermaid)\b/i.test(trimmedInfo)) {
         return fullMatch;
+      }
+      // Quarto {mermaid} executable chunk -> standard mermaid block
+      if (/^\{\s*mermaid\b[^}]*\}/i.test(trimmedInfo)) {
+        return `${indentAndFence}mermaid\n${body}${indentAndFence}`;
       }
       const startLine = src.slice(0, offset).split("\n").length - 1;
       const parsed = parseCodeFenceInfo(trimmedInfo, body);
@@ -291,9 +554,11 @@ function preprocessMarkdownCodeFences(mdText) {
   return { normalized, fenceMetaByLine };
 }
 
-async function renderMarkdownWithCarousels(markdownText, renderFn) {
-  const srcText = String(markdownText || "");
-  const totalLines = srcText.split(/\r?\n/).length;
+async function renderMarkdownWithCarousels(markdownText, renderFn, formatInfo = null) {
+  const rawInput = String(markdownText || "");
+  const totalLines = rawInput.split(/\r?\n/).length;
+  const variantPre = preprocessMarkdownVariants(rawInput, formatInfo);
+  const srcText = variantPre.text;
   const carousels = [];
   const withPlaceholders = srcText.replace(
     /^[ \t]*(`{3,})carousel[ \t]*\r?\n([\s\S]*?)\r?\n[ \t]*\1[ \t]*(?:$|\r?\n)/gm,
@@ -316,6 +581,15 @@ async function renderMarkdownWithCarousels(markdownText, renderFn) {
   const mainPre = preprocessMarkdownCodeFences(withPlaceholders);
   let mainHtml = await renderFn(mainPre.normalized);
   mainHtml = postprocessAlertsInHtml(mainHtml, mainPre.fenceMetaByLine);
+
+  for (let i = 0; i < variantPre.injectedBlocks.length; i++) {
+    const blockHtml = variantPre.injectedBlocks[i];
+    const blockPlaceholderRe = new RegExp(
+      `(?:<div[^>]*class=["'][^"']*\\bcode-line\\b[^"']*["'][^>]*>\\s*<\\/div>\\s*)?(?:<p[^>]*>\\s*)?<div data-agy-injected-block="${i}"><\\/div>(?:\\s*<\\/p>)?`,
+      "g"
+    );
+    mainHtml = mainHtml.replace(blockPlaceholderRe, blockHtml);
+  }
 
   for (let i = 0; i < carousels.length; i++) {
     const { slides, startLine, endLine } = carousels[i];
@@ -521,6 +795,9 @@ const LANG_ALIAS_MAP = {
   gql: "graphql",
   md: "markdown",
   mdx: "markdown",
+  qmd: "markdown",
+  rmd: "markdown",
+  ojs: "javascript",
   tex: "latex",
   katex: "latex",
   math: "latex",
@@ -576,6 +853,17 @@ function parseCodeFenceInfo(rawInfo, rawCode) {
   let showLineNumbers = false;
 
   let rest = info;
+  // Quarto / R Markdown executable code chunk: {python}, {r fig-plot, echo=FALSE}, {ojs}
+  const chunkMatch = rest.match(/^\{\s*([a-zA-Z][a-zA-Z0-9_+#.-]*)(?:[\s,]+([^}]*))?\}(.*)$/);
+  if (chunkMatch) {
+    const chunkLang = chunkMatch[1].toLowerCase();
+    const chunkOpts = (chunkMatch[2] || "").trim().replace(/^,\s*/, "");
+    if (chunkOpts && !title) {
+      title = `chunk: ${chunkOpts}`;
+    }
+    rest = `${chunkLang} ${chunkMatch[3] || ""}`.trim();
+  }
+
   // Extract {1,3-5} range
   const braceMatch = rest.match(/\{([\d\s,-]+)\}/);
   if (braceMatch) {
@@ -597,6 +885,14 @@ function parseCodeFenceInfo(rawInfo, rawCode) {
   if (/\b(?:showLineNumbers|lineNumbers|numberLines|linenos)\b/i.test(rest)) {
     showLineNumbers = true;
     rest = rest.replace(/\b(?:showLineNumbers|lineNumbers|numberLines|linenos)\b/gi, " ");
+  }
+
+  // Quarto in-chunk option: #| label: fig-plot or #| filename: src/app.py
+  if (!title && rawCode) {
+    const qOptMatch = String(rawCode).match(/^[ \t]*#\|[ \t]*(?:label|filename|title)[ \t]*:[ \t]*([^\r\n]+)/m);
+    if (qOptMatch) {
+      title = qOptMatch[1].trim().replace(/^["']|["']$/g, "");
+    }
   }
 
   const firstToken = (rest.trim().split(/\s+/)[0] || "").toLowerCase();
@@ -1106,6 +1402,747 @@ function postprocessCodeBlocksInHtml(html, fenceMetaByLine) {
   );
 }
 
+function escapeHtmlAttr(s) {
+  return String(s || "")
+    .replace(/&/g, "&amp;")
+    .replace(/"/g, "&quot;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
+function rewriteHtmlAssetUris(rawHtml, webview, baseDir, fallbackDir, mode = "webview") {
+  return String(rawHtml || "").replace(
+    /(\b(?:src|href)=["'])([^"']+)(["'])/gi,
+    (full, prefix, rawUrl, suffix) => {
+      const url = rawUrl.trim();
+      if (
+        !url ||
+        url.startsWith("#") ||
+        /^(?:https?:|data:|mailto:|tel:|javascript:|vscode-webview-resource:|blob:)/i.test(url)
+      ) {
+        return full;
+      }
+      const fsPath = resolveLocalAssetPath(url, baseDir, fallbackDir);
+      if (!fsPath || !fs.existsSync(fsPath)) {
+        return full;
+      }
+      if (mode === "webview" && webview) {
+        return `${prefix}${webview.asWebviewUri(vscode.Uri.file(fsPath))}${suffix}`;
+      }
+      if (mode === "pdf") {
+        return `${prefix}${vscode.Uri.file(fsPath).toString()}${suffix}`;
+      }
+      if (mode === "data" && /\.(?:png|jpe?g|gif|webp|svg|avif)$/i.test(fsPath)) {
+        try {
+          const buf = fs.readFileSync(fsPath);
+          const mime = getMimeTypeForImageExt(fsPath);
+          return `${prefix}data:${mime};base64,${buf.toString("base64")}${suffix}`;
+        } catch (_) {}
+      }
+      return full;
+    }
+  );
+}
+
+function renderHtmlDocumentPreview(rawText, info, options = {}) {
+  const src = String(rawText || "");
+  const totalLines = src.split(/\r?\n/).length;
+  const baseDir = path.dirname(info.realPath);
+  const fallbackDir = path.dirname(info.fsPath);
+  const assetMode = options.forExport
+    ? options.exportType === "pdf"
+      ? "pdf"
+      : "data"
+    : "webview";
+
+  const rewrittenHtml = rewriteHtmlAssetUris(
+    src,
+    options.webview || null,
+    baseDir,
+    fallbackDir,
+    assetMode
+  );
+
+  const iframeBridgeScript = `<script data-agy-iframe-bridge="1">
+(function(){
+  var lockUntil = 0;
+  window.addEventListener("scroll", function(){
+    if (Date.now() < lockUntil) return;
+    var maxScroll = Math.max(1, document.documentElement.scrollHeight - window.innerHeight);
+    var ratio = Math.max(0, Math.min(1, window.scrollY / maxScroll));
+    try { window.parent.postMessage({ type: "agy.iframe.scroll", ratio: ratio, totalLines: ${totalLines} }, "*"); } catch(_) {}
+  }, { passive: true });
+  window.addEventListener("message", function(ev){
+    var d = ev && ev.data;
+    if (!d || d.type !== "agy.iframe.scrollToRatio") return;
+    lockUntil = Date.now() + 220;
+    var maxScroll = Math.max(0, document.documentElement.scrollHeight - window.innerHeight);
+    window.scrollTo({ top: Math.round((d.ratio || 0) * maxScroll), behavior: d.instant ? "auto" : "smooth" });
+  });
+})();
+</script>`;
+
+  const srcdocContent = /<\/body>/i.test(rewrittenHtml)
+    ? rewrittenHtml.replace(/<\/body>/i, `${iframeBridgeScript}</body>`)
+    : `${rewrittenHtml}\n${iframeBridgeScript}`;
+
+  // Extract Reader View HTML (body inner content without <script> tags, enhanced with Antigravity tables/code)
+  const bodyMatch = rewrittenHtml.match(/<body[^>]*>([\s\S]*?)<\/body>/i);
+  const rawBodyInner = bodyMatch ? bodyMatch[1] : rewrittenHtml;
+  const safeReaderInner = rawBodyInner
+    .replace(/<script\b[\s\S]*?<\/script>/gi, "")
+    .replace(/<style\b[\s\S]*?<\/style>/gi, "");
+  const readerHtml = postprocessAlertsInHtml(safeReaderInner, null);
+
+  let defaultLineNums = true;
+  try {
+    defaultLineNums = Boolean(
+      vscode.workspace.getConfiguration("agyMarkdown").get("codeLineNumbers", false)
+    );
+  } catch (_) {}
+  const highlightedSource = enrichCodeBlockHtml(
+    escapeHtml(src),
+    "html",
+    "",
+    defaultLineNums || true
+  );
+
+  if (options.forExport && options.exportType === "pdf") {
+    return `${readerHtml}\n<div class="code-line agy-scroll-sentinel" data-line="${totalLines}"></div>`;
+  }
+
+  return (
+    `<div class="agy-studio-card agy-html-studio code-line" data-line="0" data-line-end="${totalLines}" data-total-lines="${totalLines}">` +
+    `<div class="agy-studio-bar">` +
+    `<div class="agy-studio-pills">` +
+    `<button type="button" class="agy-studio-pill active" data-html-pane="webview" title="Render live HTML page in sandboxed web view">🌐 Web View</button>` +
+    `<button type="button" class="agy-studio-pill" data-html-pane="reader" title="Render HTML content with Antigravity typography, tables & Outline">✨ Reader View</button>` +
+    `<button type="button" class="agy-studio-pill" data-html-pane="source" title="Inspect syntax-highlighted HTML source (${totalLines} lines)">&lt;/&gt; Source (${totalLines}L)</button>` +
+    `</div>` +
+    `<div class="agy-studio-controls" id="agy-html-webview-controls">` +
+    `<span class="agy-studio-label">Canvas:</span>` +
+    `<button type="button" class="agy-surface-btn active" data-html-bg="auto" title="Keep page's own background">Auto</button>` +
+    `<button type="button" class="agy-surface-btn" data-html-bg="light" title="Force white canvas background">Light</button>` +
+    `<button type="button" class="agy-surface-btn" data-html-bg="dark" title="Force dark canvas background">Dark</button>` +
+    `<span class="agy-studio-sep"></span>` +
+    `<button type="button" class="agy-surface-btn active" data-html-width="100%" title="Full width">100%</button>` +
+    `<button type="button" class="agy-surface-btn" data-html-width="1024px" title="Desktop / Laptop width">1024px</button>` +
+    `<button type="button" class="agy-surface-btn" data-html-width="768px" title="Tablet width">768px</button>` +
+    `<button type="button" class="agy-surface-btn" data-html-width="390px" title="Mobile width">390px</button>` +
+    `<span class="agy-studio-sep"></span>` +
+    `<button type="button" class="agy-btn agy-btn-subtle" id="agy-html-open-browser" title="Open this HTML file in your default web browser">↗ Browser</button>` +
+    `</div>` +
+    `</div>` +
+    `<div class="agy-html-pane active" data-pane-id="webview">` +
+    `<div class="agy-html-iframe-wrap" data-bg="auto">` +
+    `<iframe class="agy-html-iframe" id="agy-html-iframe" sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals" srcdoc="${escapeHtmlAttr(
+      srcdocContent
+    )}"></iframe>` +
+    `</div>` +
+    `</div>` +
+    `<div class="agy-html-pane agy-html-reader-pane" data-pane-id="reader" hidden>` +
+    `${readerHtml}` +
+    `</div>` +
+    `<div class="agy-html-pane agy-html-source-pane" data-pane-id="source" hidden>` +
+    `<pre><code class="language-xml" data-lang="html" data-title="${escapeHtml(
+      path.basename(info.fsPath)
+    )}" data-line-numbers="1" data-agy-highlighted="1">${highlightedSource}</code></pre>` +
+    `</div>` +
+    `</div>` +
+    `<div class="code-line agy-scroll-sentinel" data-line="${totalLines}"></div>`
+  );
+}
+
+function renderSvgDocumentPreview(rawText, info) {
+  const src = String(rawText || "");
+  const totalLines = src.split(/\r?\n/).length;
+  const byteSize = Buffer.byteLength(src, "utf8");
+  const sizeLabel =
+    byteSize >= 1024 ? `${(byteSize / 1024).toFixed(1)} KB` : `${byteSize} B`;
+  const dims = getImageDimensions(info.realPath) || getImageDimensions(info.fsPath);
+  const vbMatch = src.match(/\bviewBox=["']\s*([^"']+)\s*["']/i);
+  const dimsLabel = dims
+    ? `${dims.width} × ${dims.height} px`
+    : vbMatch
+    ? `viewBox ${vbMatch[1].trim()}`
+    : "Vector SVG";
+  const nodeMatches = src.match(/<(?:path|rect|circle|ellipse|line|polyline|polygon|text|g|use|image)\b/gi);
+  const nodeCount = nodeMatches ? nodeMatches.length : 0;
+
+  const base64Svg = Buffer.from(src, "utf8").toString("base64");
+  const svgDataUri = `data:image/svg+xml;base64,${base64Svg}`;
+  const highlightedXml = enrichCodeBlockHtml(escapeHtml(src), "xml", "", true);
+
+  return (
+    `<div class="agy-studio-card agy-svg-studio code-line" data-line="0" data-line-end="${totalLines}" data-raw-svg-b64="${base64Svg}">` +
+    `<div class="agy-studio-bar">` +
+    `<div class="agy-studio-pills">` +
+    `<span class="agy-studio-meta-pill">${escapeHtml(dimsLabel)}</span>` +
+    `<span class="agy-studio-meta-pill">${escapeHtml(sizeLabel)}</span>` +
+    `<span class="agy-studio-meta-pill">${nodeCount} SVG elements</span>` +
+    `</div>` +
+    `<div class="agy-studio-controls">` +
+    `<span class="agy-studio-label">Surface:</span>` +
+    `<button type="button" class="agy-surface-btn active" data-stage-surface="checkerboard" title="Transparency checkerboard grid">Grid</button>` +
+    `<button type="button" class="agy-surface-btn" data-stage-surface="theme" title="Active VS Code theme surface">Theme</button>` +
+    `<button type="button" class="agy-surface-btn" data-stage-surface="light" title="Crisp white surface">Light</button>` +
+    `<button type="button" class="agy-surface-btn" data-stage-surface="dark" title="Dark carbon surface">Dark</button>` +
+    `<span class="agy-studio-sep"></span>` +
+    `<button type="button" class="agy-surface-btn" data-stage-zoom="out" title="Zoom out">−</button>` +
+    `<button type="button" class="agy-surface-btn" data-stage-zoom="reset" title="Reset zoom & pan">100%</button>` +
+    `<button type="button" class="agy-surface-btn" data-stage-zoom="in" title="Zoom in">+</button>` +
+    `<button type="button" class="agy-surface-btn" data-stage-action="copy-svg" title="Copy raw SVG XML markup">Copy SVG</button>` +
+    `<button type="button" class="agy-surface-btn" data-stage-action="copy-data-uri" title="Copy base64 Data URI">Copy Data URI</button>` +
+    `<button type="button" class="agy-surface-btn" data-stage-action="lightbox" title="Open in fullscreen Lightbox">⛶ Expand</button>` +
+    `</div>` +
+    `</div>` +
+    `<div class="agy-studio-stage" data-surface="checkerboard">` +
+    `<div class="agy-studio-stage-canvas">` +
+    `<img class="agy-svg-preview-img" decoding="sync" src="${svgDataUri}" alt="${escapeHtml(
+      path.basename(info.fsPath)
+    )}" />` +
+    `</div>` +
+    `<div class="agy-studio-stage-hint">Scroll to zoom · Drag to pan · Double-click to reset · Click image for fullscreen</div>` +
+    `</div>` +
+    `<details class="agy-studio-source">` +
+    `<summary>SVG XML Source (${totalLines} lines · ${escapeHtml(sizeLabel)})</summary>` +
+    `<pre><code class="language-xml" data-lang="svg" data-title="${escapeHtml(
+      path.basename(info.fsPath)
+    )}" data-line-numbers="1" data-agy-highlighted="1">${highlightedXml}</code></pre>` +
+    `</details>` +
+    `</div>` +
+    `<div class="code-line agy-scroll-sentinel" data-line="${totalLines}"></div>`
+  );
+}
+
+function detectMermaidDiagramKind(rawText) {
+  const lines = String(rawText || "")
+    .split(/\r?\n/)
+    .map((l) => l.trim())
+    .filter((l) => l && !l.startsWith("%%"));
+  const first = lines[0] || "";
+  if (/^(?:flowchart|graph)\b/i.test(first)) return "Flowchart";
+  if (/^sequenceDiagram\b/i.test(first)) return "Sequence Diagram";
+  if (/^stateDiagram(?:-v2)?\b/i.test(first)) return "State Diagram";
+  if (/^classDiagram\b/i.test(first)) return "Class Diagram";
+  if (/^erDiagram\b/i.test(first)) return "ER Diagram";
+  if (/^xychart(?:-beta)?\b/i.test(first)) return "XY Chart";
+  if (/^gantt\b/i.test(first)) return "Gantt Chart";
+  if (/^pie\b/i.test(first)) return "Pie Chart";
+  if (/^mindmap\b/i.test(first)) return "Mindmap";
+  if (/^timeline\b/i.test(first)) return "Timeline";
+  if (/^gitGraph\b/i.test(first)) return "Git Graph";
+  if (/^journey\b/i.test(first)) return "User Journey";
+  return "Mermaid Diagram";
+}
+
+function renderMermaidDocumentPreview(rawText, info) {
+  const src = String(rawText || "");
+  const totalLines = src.split(/\r?\n/).length;
+  const diagramKind = detectMermaidDiagramKind(src);
+  const highlightedSource = enrichCodeBlockHtml(escapeHtml(src), "yaml", "", true);
+
+  return (
+    `<div class="agy-studio-card agy-mermaid-studio code-line" data-line="0" data-line-end="${totalLines}">` +
+    `<div class="agy-studio-bar">` +
+    `<div class="agy-studio-pills">` +
+    `<span class="agy-studio-meta-pill">${escapeHtml(diagramKind)}</span>` +
+    `<span class="agy-studio-meta-pill">${totalLines} lines</span>` +
+    `</div>` +
+    `<div class="agy-studio-controls">` +
+    `<span class="agy-studio-label">Surface:</span>` +
+    `<button type="button" class="agy-surface-btn active" data-mermaid-surface="theme">Theme</button>` +
+    `<button type="button" class="agy-surface-btn" data-mermaid-surface="checkerboard">Grid</button>` +
+    `<button type="button" class="agy-surface-btn" data-mermaid-surface="light">Light</button>` +
+    `<button type="button" class="agy-surface-btn" data-mermaid-surface="dark">Dark</button>` +
+    `</div>` +
+    `</div>` +
+    `<div class="agy-mermaid-container agy-studio-mermaid-stage code-line" data-surface="theme" data-line="0" data-line-end="${totalLines}">` +
+    `<div class="mermaid">${escapeHtml(src.trim())}</div>` +
+    `</div>` +
+    `<details class="agy-studio-source" open>` +
+    `<summary>Mermaid Diagram Source (${totalLines} lines)</summary>` +
+    `<pre><code class="language-yaml" data-lang="mermaid" data-title="${escapeHtml(
+      path.basename(info.fsPath)
+    )}" data-line-numbers="1" data-agy-highlighted="1">${highlightedSource}</code></pre>` +
+    `</details>` +
+    `</div>` +
+    `<div class="code-line agy-scroll-sentinel" data-line="${totalLines}"></div>`
+  );
+}
+
+function parseDelimitedTable(rawText, delimiter = ",") {
+  const src = String(rawText || "");
+  const rows = [];
+  let currentRow = [];
+  let currentField = "";
+  let inQuotes = false;
+  let currentLine = 0;
+  let rowStartLine = 0;
+
+  for (let i = 0; i < src.length; i++) {
+    const ch = src[i];
+    const next = src[i + 1];
+    if (inQuotes) {
+      if (ch === '"') {
+        if (next === '"') {
+          currentField += '"';
+          i++;
+        } else {
+          inQuotes = false;
+        }
+      } else {
+        if (ch === "\n") currentLine++;
+        currentField += ch;
+      }
+      continue;
+    }
+
+    if (ch === '"' && currentField.length === 0) {
+      inQuotes = true;
+      continue;
+    }
+    if (ch === delimiter) {
+      currentRow.push(currentField);
+      currentField = "";
+      continue;
+    }
+    if (ch === "\r" && next === "\n") {
+      currentRow.push(currentField);
+      if (currentRow.length > 1 || (currentRow[0] && currentRow[0].trim() !== "")) {
+        rows.push({ sourceLine: rowStartLine, cells: currentRow });
+      }
+      currentRow = [];
+      currentField = "";
+      currentLine++;
+      rowStartLine = currentLine;
+      i++;
+      continue;
+    }
+    if (ch === "\n" || ch === "\r") {
+      currentRow.push(currentField);
+      if (currentRow.length > 1 || (currentRow[0] && currentRow[0].trim() !== "")) {
+        rows.push({ sourceLine: rowStartLine, cells: currentRow });
+      }
+      currentRow = [];
+      currentField = "";
+      currentLine++;
+      rowStartLine = currentLine;
+      continue;
+    }
+    currentField += ch;
+  }
+
+  if (inQuotes || currentField.length > 0 || currentRow.length > 0) {
+    currentRow.push(currentField);
+    if (currentRow.length > 1 || (currentRow[0] && currentRow[0].trim() !== "")) {
+      rows.push({ sourceLine: rowStartLine, cells: currentRow });
+    }
+  }
+  return rows;
+}
+
+function formatTableCellHtml(cellValue) {
+  const s = String(cellValue == null ? "" : cellValue).trim();
+  if (!s) return `<span class="agy-cell-empty">—</span>`;
+  if (/^(?:true|false)$/i.test(s)) {
+    const isTrue = s.toLowerCase() === "true";
+    return `<span class="agy-cell-bool ${isTrue ? "bool-true" : "bool-false"}">${escapeHtml(
+      s
+    )}</span>`;
+  }
+  if (/^(?:https?:\/\/|file:\/\/)\S+$/i.test(s)) {
+    return `<a href="${escapeHtmlAttr(s)}">${escapeHtml(s)}</a>`;
+  }
+  return escapeHtml(s);
+}
+
+function renderDelimitedTablePreview(rawText, info) {
+  const src = String(rawText || "");
+  const totalLines = src.split(/\r?\n/).length;
+  const isTsv = info.format && info.format.id === "tsv";
+  const delimiter = isTsv ? "\t" : ",";
+  const allRows = parseDelimitedTable(src, delimiter);
+  if (!allRows.length) {
+    return `<div class="markdown-alert markdown-alert-note"><p class="markdown-alert-title">EMPTY TABLE</p><p>No rows found in <code>${escapeHtml(
+      path.basename(info.fsPath)
+    )}</code>.</p></div>`;
+  }
+
+  const headerCells = allRows[0].cells;
+  const dataRows = allRows.slice(1);
+  const colCount = allRows.reduce((m, r) => Math.max(m, r.cells.length), headerCells.length);
+  const MAX_RENDER_ROWS = 2500;
+  const visibleRows = dataRows.slice(0, MAX_RENDER_ROWS);
+  const truncatedCount = Math.max(0, dataRows.length - visibleRows.length);
+
+  const ths = [];
+  ths.push(`<th class="agy-csv-row-num" title="Row number">#</th>`);
+  for (let c = 0; c < colCount; c++) {
+    const colName = headerCells[c] !== undefined && String(headerCells[c]).trim() !== ""
+      ? String(headerCells[c]).trim()
+      : `Col ${c + 1}`;
+    ths.push(
+      `<th class="agy-sortable-th" data-col-idx="${c}" title="Click to sort by ${escapeHtmlAttr(
+        colName
+      )}"><span class="agy-th-content"><span>${escapeHtml(
+        colName
+      )}</span><span class="agy-sort-indicator">⇅</span></span></th>`
+    );
+  }
+
+  const trs = visibleRows.map((row, rIdx) => {
+    const tds = [`<td class="agy-csv-row-num">${rIdx + 1}</td>`];
+    for (let c = 0; c < colCount; c++) {
+      const val = row.cells[c] !== undefined ? row.cells[c] : "";
+      const isNum =
+        typeof val === "string" &&
+        val.trim() !== "" &&
+        /^[+-]?(?:\d+\.?\d*|\.\d+)(?:e[+-]?\d+)?%?$/i.test(val.trim());
+      tds.push(
+        `<td${isNum ? ' class="agy-cell-num"' : ""} data-raw="${escapeHtmlAttr(
+          val
+        )}">${formatTableCellHtml(val)}</td>`
+      );
+    }
+    return `<tr class="code-line" data-line="${row.sourceLine}" data-row-idx="${rIdx}">${tds.join(
+      ""
+    )}</tr>`;
+  });
+
+  const truncBanner =
+    truncatedCount > 0
+      ? `<div class="agy-studio-trunc-notice">Showing first ${visibleRows.length} of ${dataRows.length} rows (${truncatedCount} more in raw file).</div>`
+      : "";
+
+  return (
+    `<div class="agy-studio-card agy-csv-studio code-line" data-line="0" data-line-end="${totalLines}">` +
+    `<div class="agy-studio-bar">` +
+    `<div class="agy-studio-pills">` +
+    `<span class="agy-studio-meta-pill">${isTsv ? "TSV" : "CSV"} Table</span>` +
+    `<span class="agy-studio-meta-pill" id="agy-csv-count-badge" data-total="${
+      visibleRows.length
+    }" data-cols="${colCount}">${dataRows.length} rows × ${colCount} columns</span>` +
+    `</div>` +
+    `<div class="agy-studio-controls">` +
+    `<input type="search" class="agy-studio-search" id="agy-csv-search" placeholder="Filter ${dataRows.length} rows across ${colCount} columns…" autocomplete="off" />` +
+    `</div>` +
+    `</div>` +
+    `<div class="agy-table-wrapper agy-csv-table-wrapper">` +
+    `<table class="agy-csv-table" id="agy-csv-table">` +
+    `<thead><tr>${ths.join("")}</tr></thead>` +
+    `<tbody>${trs.join("")}</tbody>` +
+    `</table>` +
+    `</div>` +
+    `${truncBanner}` +
+    `</div>` +
+    `<div class="code-line agy-scroll-sentinel" data-line="${totalLines}"></div>`
+  );
+}
+
+function renderJsonlDocumentPreview(rawText, info) {
+  const src = String(rawText || "");
+  const rawLines = src.split(/\r?\n/);
+  const totalLines = rawLines.length;
+  const records = [];
+
+  for (let i = 0; i < rawLines.length; i++) {
+    const trimmed = rawLines[i].trim();
+    if (!trimmed) continue;
+    try {
+      const parsed = JSON.parse(trimmed);
+      records.push({ sourceLine: i, ok: true, data: parsed, raw: trimmed });
+    } catch (err) {
+      records.push({
+        sourceLine: i,
+        ok: false,
+        data: null,
+        raw: trimmed,
+        error: err && err.message ? err.message : "Invalid JSON"
+      });
+    }
+  }
+
+  if (!records.length) {
+    return `<div class="markdown-alert markdown-alert-note"><p class="markdown-alert-title">EMPTY JSONL</p><p>No JSONL records found in <code>${escapeHtml(
+      path.basename(info.fsPath)
+    )}</code>.</p></div>`;
+  }
+
+  // Detect Antigravity Conversation Transcript format
+  const sampleValid = records.filter((r) => r.ok && r.data && typeof r.data === "object").slice(0, 8);
+  const isTranscript =
+    sampleValid.length > 0 &&
+    sampleValid.some(
+      (r) =>
+        typeof r.data.step_index === "number" ||
+        (typeof r.data.source === "string" &&
+          typeof r.data.type === "string" &&
+          (r.data.content !== undefined ||
+            r.data.thinking !== undefined ||
+            r.data.tool_calls !== undefined))
+    );
+
+  if (isTranscript) {
+    let userCount = 0;
+    let plannerCount = 0;
+    let toolCount = 0;
+    let errorCount = 0;
+
+    const cardsHtml = records.map((rec, idx) => {
+      if (!rec.ok || !rec.data || typeof rec.data !== "object") {
+        errorCount++;
+        return (
+          `<article class="agy-jsonl-step-card role-error code-line" data-line="${rec.sourceLine}" data-role="error">` +
+          `<div class="agy-step-header">` +
+          `<span class="agy-step-idx">Line #${rec.sourceLine + 1}</span>` +
+          `<span class="agy-step-badge badge-error">PARSE ERROR</span>` +
+          `</div>` +
+          `<pre><code class="language-json">${escapeHtml(rec.raw)}</code></pre>` +
+          `</article>`
+        );
+      }
+
+      const d = rec.data;
+      const stepIdx = d.step_index !== undefined ? d.step_index : idx;
+      const source = String(d.source || "").toUpperCase();
+      const type = String(d.type || "STEP").toUpperCase();
+      const status = String(d.status || "").toUpperCase();
+      const createdAt = d.created_at ? String(d.created_at).replace("T", " ").slice(0, 19) : "";
+      const toolCalls = Array.isArray(d.tool_calls) ? d.tool_calls : [];
+      const hasError = status === "ERROR" || type.includes("ERROR");
+
+      let role = "system";
+      if (hasError) {
+        role = "error";
+        errorCount++;
+      } else if (type === "USER_INPUT" || source.includes("USER")) {
+        role = "user";
+        userCount++;
+      } else if (type === "PLANNER_RESPONSE" || source === "MODEL") {
+        role = "planner";
+        plannerCount++;
+      }
+      if (toolCalls.length > 0) {
+        toolCount += toolCalls.length;
+      }
+
+      const thinkingSection =
+        typeof d.thinking === "string" && d.thinking.trim()
+          ? `<details class="agy-step-thinking"><summary>💭 Thinking (${
+              d.thinking.trim().length
+            } chars)</summary><div class="agy-step-thinking-body">${escapeHtml(
+              d.thinking.trim()
+            )}</div></details>`
+          : "";
+
+      const contentText =
+        typeof d.content === "string"
+          ? d.content.trim()
+          : d.content !== undefined && d.content !== null
+          ? JSON.stringify(d.content, null, 2)
+          : "";
+      const contentSection = contentText
+        ? `<div class="agy-step-content">${escapeHtml(contentText)}</div>`
+        : "";
+
+      let toolsSection = "";
+      if (toolCalls.length > 0) {
+        const toolItems = toolCalls
+          .map((tc) => {
+            const name =
+              (tc && (tc.name || tc.tool_name || (tc.function && tc.function.name))) || "tool_call";
+            const argsObj =
+              tc && (tc.arguments !== undefined ? tc.arguments : tc.args !== undefined ? tc.args : tc);
+            const prettyArgs =
+              typeof argsObj === "string" ? argsObj : JSON.stringify(argsObj, null, 2);
+            const hlArgs = highlightFallbackPlainCode(prettyArgs, "json");
+            return (
+              `<div class="agy-tool-call-item">` +
+              `<div class="agy-tool-call-title"><code>🔧 ${escapeHtml(String(name))}</code></div>` +
+              `<pre><code class="language-json" data-agy-highlighted="1">${hlArgs}</code></pre>` +
+              `</div>`
+            );
+          })
+          .join("");
+        toolsSection = `<details class="agy-step-tools"><summary>🔧 Tool Calls (${toolCalls.length})</summary><div class="agy-step-tools-list">${toolItems}</div></details>`;
+      }
+
+      const truncNotice =
+        Array.isArray(d.truncated_fields) && d.truncated_fields.length > 0
+          ? `<span class="agy-step-badge badge-warn" title="Read transcript_full.jsonl line ${
+              rec.sourceLine + 1
+            } for full content">✂️ truncated: ${escapeHtml(d.truncated_fields.join(", "))}</span>`
+          : "";
+
+      return (
+        `<article class="agy-jsonl-step-card role-${role} code-line" data-line="${
+          rec.sourceLine
+        }" data-role="${role}" data-has-tools="${toolCalls.length > 0 ? "1" : "0"}">` +
+        `<div class="agy-step-header">` +
+        `<div class="agy-step-header-left">` +
+        `<span class="agy-step-idx">#${escapeHtml(String(stepIdx))}</span>` +
+        `<span class="agy-step-badge badge-${role}">${escapeHtml(type)}</span>` +
+        (source ? `<span class="agy-step-meta">${escapeHtml(source)}</span>` : "") +
+        (status && status !== "DONE"
+          ? `<span class="agy-step-badge ${
+              hasError ? "badge-error" : "badge-warn"
+            }">${escapeHtml(status)}</span>`
+          : "") +
+        truncNotice +
+        `</div>` +
+        `<div class="agy-step-header-right">` +
+        (createdAt ? `<span class="agy-step-time">${escapeHtml(createdAt)}</span>` : "") +
+        `<span class="agy-step-line">L${rec.sourceLine + 1}</span>` +
+        `<button type="button" class="agy-surface-btn agy-copy-json-btn" data-json="${escapeHtmlAttr(
+          JSON.stringify(d, null, 2)
+        )}">Copy JSON</button>` +
+        `</div>` +
+        `</div>` +
+        thinkingSection +
+        contentSection +
+        toolsSection +
+        `</article>`
+      );
+    });
+
+    return (
+      `<div class="agy-studio-card agy-jsonl-studio code-line" data-line="0" data-line-end="${totalLines}">` +
+      `<div class="agy-studio-bar">` +
+      `<div class="agy-studio-pills">` +
+      `<button type="button" class="agy-studio-pill active" data-jsonl-filter="all">All (${records.length})</button>` +
+      `<button type="button" class="agy-studio-pill" data-jsonl-filter="user">💬 User (${userCount})</button>` +
+      `<button type="button" class="agy-studio-pill" data-jsonl-filter="planner">🤖 Planner (${plannerCount})</button>` +
+      `<button type="button" class="agy-studio-pill" data-jsonl-filter="tools">🔧 Tools (${toolCount})</button>` +
+      (errorCount > 0
+        ? `<button type="button" class="agy-studio-pill" data-jsonl-filter="error">⚠️ Errors (${errorCount})</button>`
+        : "") +
+      `</div>` +
+      `<div class="agy-studio-controls">` +
+      `<input type="search" class="agy-studio-search" id="agy-jsonl-search" placeholder="Search transcript steps, thinking, or tools…" autocomplete="off" />` +
+      `<button type="button" class="agy-surface-btn" id="agy-jsonl-expand-all">Expand All</button>` +
+      `</div>` +
+      `</div>` +
+      `<div class="agy-jsonl-list" id="agy-jsonl-list">${cardsHtml.join("")}</div>` +
+      `</div>` +
+      `<div class="code-line agy-scroll-sentinel" data-line="${totalLines}"></div>`
+    );
+  }
+
+  // Generic JSONL / NDJSON Dataset Inspector
+  const MAX_RECORDS = 1000;
+  const visibleRecords = records.slice(0, MAX_RECORDS);
+  const cardsHtml = visibleRecords.map((rec, idx) => {
+    const pretty = rec.ok ? JSON.stringify(rec.data, null, 2) : rec.raw;
+    const highlighted = rec.ok
+      ? highlightFallbackPlainCode(pretty, "json")
+      : escapeHtml(rec.raw);
+    const summaryKeys =
+      rec.ok && rec.data && typeof rec.data === "object" && !Array.isArray(rec.data)
+        ? Object.entries(rec.data)
+            .slice(0, 4)
+            .map(([k, v]) => {
+              const valStr =
+                typeof v === "object" && v !== null ? JSON.stringify(v) : String(v);
+              return `<span class="agy-jsonl-kv"><b>${escapeHtml(k)}:</b> ${escapeHtml(
+                valStr.slice(0, 48)
+              )}${valStr.length > 48 ? "…" : ""}</span>`;
+            })
+            .join("")
+        : "";
+    return (
+      `<article class="agy-jsonl-step-card role-generic code-line" data-line="${rec.sourceLine}" data-role="all">` +
+      `<div class="agy-step-header">` +
+      `<div class="agy-step-header-left">` +
+      `<span class="agy-step-idx">#${idx + 1}</span>` +
+      `<span class="agy-step-line">Line ${rec.sourceLine + 1}</span>` +
+      summaryKeys +
+      `</div>` +
+      `<div class="agy-step-header-right">` +
+      `<button type="button" class="agy-surface-btn agy-copy-json-btn" data-json="${escapeHtmlAttr(
+        pretty
+      )}">Copy JSON</button>` +
+      `</div>` +
+      `</div>` +
+      `<pre><code class="language-json" data-agy-highlighted="1">${highlighted}</code></pre>` +
+      `</article>`
+    );
+  });
+
+  return (
+    `<div class="agy-studio-card agy-jsonl-studio code-line" data-line="0" data-line-end="${totalLines}">` +
+    `<div class="agy-studio-bar">` +
+    `<div class="agy-studio-pills">` +
+    `<span class="agy-studio-meta-pill">${info.format ? info.format.badge : "JSONL"}</span>` +
+    `<span class="agy-studio-meta-pill" id="agy-jsonl-count-badge">${records.length} records</span>` +
+    `</div>` +
+    `<div class="agy-studio-controls">` +
+    `<input type="search" class="agy-studio-search" id="agy-jsonl-search" placeholder="Filter ${records.length} JSONL records…" autocomplete="off" />` +
+    `</div>` +
+    `</div>` +
+    `<div class="agy-jsonl-list" id="agy-jsonl-list">${cardsHtml.join("")}</div>` +
+    `</div>` +
+    `<div class="code-line agy-scroll-sentinel" data-line="${totalLines}"></div>`
+  );
+}
+
+async function renderDocumentContent(rawText, info, options = {}) {
+  const fmt = (info && info.format) || detectDocumentFormat(info && info.fsPath);
+  if (fmt.id === "html") {
+    return renderHtmlDocumentPreview(rawText, info, options);
+  }
+  if (fmt.id === "svg") {
+    return renderSvgDocumentPreview(rawText, info);
+  }
+  if (fmt.id === "mermaid") {
+    return renderMermaidDocumentPreview(rawText, info);
+  }
+  if (fmt.id === "csv" || fmt.id === "tsv") {
+    return renderDelimitedTablePreview(rawText, info);
+  }
+  if (fmt.id === "jsonl") {
+    return renderJsonlDocumentPreview(rawText, info);
+  }
+
+  let renderedHtml = "";
+  try {
+    renderedHtml = await renderMarkdownWithCarousels(
+      rawText,
+      async (mdChunk) => {
+        return await vscode.commands.executeCommand("markdown.api.render", mdChunk);
+      },
+      fmt
+    );
+  } catch (_) {
+    renderedHtml = `<pre>${escapeHtml(rawText)}</pre>`;
+  }
+
+  if (options.forExport) {
+    if (options.exportType === "pdf") {
+      renderedHtml = rewriteLocalImageUrisForPdf(
+        renderedHtml,
+        path.dirname(info.realPath),
+        path.dirname(info.fsPath)
+      );
+      renderedHtml = renderedHtml.replace(/<details\b(?![^>]*\bopen\b)/gi, "<details open");
+    } else if (options.exportType === "html") {
+      renderedHtml = embedLocalImagesAsDataUris(
+        renderedHtml,
+        path.dirname(info.realPath),
+        path.dirname(info.fsPath)
+      );
+    }
+  } else if (options.webview) {
+    renderedHtml = rewriteLocalImageUris(
+      renderedHtml,
+      options.webview,
+      path.dirname(info.realPath),
+      path.dirname(info.fsPath)
+    );
+  }
+  return renderedHtml;
+}
+
 class AntigravityMarkdownReviewProvider {
   constructor(context) {
     this.context = context;
@@ -1214,7 +2251,7 @@ class AntigravityMarkdownReviewProvider {
       const displayPath = info.isSymlink
         ? `${path.basename(info.fsPath)} → ${shortenHome(info.realPath)}`
         : shortenHome(info.fsPath);
-      const docTitle = formatDocumentTitle(info.fsPath);
+      const docTitle = formatDocumentTitle(info.fsPath, rawText);
 
       if (isWebviewInitialized && !force && !contentChanged) {
         await webview.postMessage({
@@ -1225,21 +2262,10 @@ class AntigravityMarkdownReviewProvider {
         return;
       }
 
-      let renderedHtml = "";
-      try {
-        renderedHtml = await renderMarkdownWithCarousels(rawText, async (mdChunk) => {
-          return await vscode.commands.executeCommand("markdown.api.render", mdChunk);
-        });
-      } catch (_) {
-        renderedHtml = `<pre>${escapeHtml(rawText)}</pre>`;
-      }
-
-      renderedHtml = rewriteLocalImageUris(
-        renderedHtml,
+      const renderedHtml = await renderDocumentContent(rawText, info, {
         webview,
-        path.dirname(info.realPath),
-        path.dirname(info.fsPath)
-      );
+        forExport: false
+      });
 
       if (isWebviewInitialized && !force) {
         if (renderedHtml === lastRenderedHtml) {
@@ -1251,6 +2277,8 @@ class AntigravityMarkdownReviewProvider {
           renderedHtml,
           displayPath,
           docTitle,
+          formatBadge: info.format ? info.format.badge : "MD",
+          formatId: info.format ? info.format.id : "markdown",
           isLightTheme,
           themeCss
         });
@@ -1282,6 +2310,7 @@ class AntigravityMarkdownReviewProvider {
         displayPath,
         realFilePath: info.realPath,
         docTitle,
+        formatInfo: info.format,
         isBrainArtifact: info.isBrainArtifact,
         isSymlink: info.isSymlink,
         isLightTheme,
@@ -1575,7 +2604,7 @@ class AntigravityMarkdownReviewProvider {
             const raw = fs.readFileSync(info.realPath, "utf8");
             await vscode.env.clipboard.writeText(raw);
             vscode.window.setStatusBarMessage(
-              "Antigravity: Copied raw Markdown to clipboard",
+              "Antigravity: Copied raw source to clipboard",
               2500
             );
           } catch (_) {}
@@ -1583,6 +2612,10 @@ class AntigravityMarkdownReviewProvider {
           try {
             await vscode.env.clipboard.writeText(msg.text);
             vscode.window.setStatusBarMessage("Antigravity: Copied to clipboard", 2000);
+          } catch (_) {}
+        } else if (msg.type === "openExternalBrowser") {
+          try {
+            await vscode.env.openExternal(vscode.Uri.file(info.realPath));
           } catch (_) {}
         } else if (msg.type === "openLink") {
           await handleWebviewLinkClick(msg.href, info);
@@ -1703,7 +2736,7 @@ async function handleWebviewLinkClick(href, currentInfo) {
     return;
   }
 
-  if (/\.(md|markdown)$/i.test(targetFsPath)) {
+  if (SUPPORTED_DOC_EXT_RE.test(targetFsPath)) {
     await vscode.commands.executeCommand("vscode.openWith", targetUri, "antigravity.markdownReview");
   } else {
     await vscode.commands.executeCommand("vscode.open", targetUri);
@@ -2435,7 +3468,7 @@ async function exportMarkdownToPdf({ info, extensionPath, mode = "ask", computed
     effectiveMode = picked.mode;
   }
 
-  const defaultPdfPath = info.fsPath.replace(/\.(?:md|markdown|mdx)$/i, "") + ".pdf";
+  const defaultPdfPath = info.fsPath.replace(SUPPORTED_DOC_EXT_RE, "") + ".pdf";
   const saveUri = await vscode.window.showSaveDialog({
     defaultUri: vscode.Uri.file(defaultPdfPath),
     filters: { "PDF Document": ["pdf"] },
@@ -2452,7 +3485,7 @@ async function exportMarkdownToPdf({ info, extensionPath, mode = "ask", computed
     try {
       rawText = fs.readFileSync(info.fsPath, "utf8");
     } catch (_) {
-      vscode.window.showErrorMessage(`Unable to read Markdown file: ${info.fsPath}`);
+      vscode.window.showErrorMessage(`Unable to read document file: ${info.fsPath}`);
       return;
     }
   }
@@ -2466,8 +3499,10 @@ async function exportMarkdownToPdf({ info, extensionPath, mode = "ask", computed
 
   let renderedHtml = "";
   try {
-    renderedHtml = await renderMarkdownWithCarousels(rawText, async (mdChunk) => {
-      return await vscode.commands.executeCommand("markdown.api.render", mdChunk);
+    renderedHtml = await renderDocumentContent(rawText, info, {
+      webview: null,
+      forExport: true,
+      exportType: "pdf"
     });
   } catch (_) {
     renderedHtml = `<pre>${escapeHtml(rawText)}</pre>`;
@@ -2579,7 +3614,7 @@ html, body {
   </table>`
     : `<main class="agy-review-container" id="agy-content">${renderedHtml}</main>`;
 
-  const docTitle = formatDocumentTitle(info.fsPath);
+  const docTitle = formatDocumentTitle(info.fsPath, rawText);
   const fullHtml = `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -2736,7 +3771,10 @@ async function exportMarkdownToHtml({ info, extensionPath, mode = "ask", compute
     effectiveMode = picked.mode;
   }
 
-  const defaultHtmlPath = info.fsPath.replace(/\.(?:md|markdown|mdx)$/i, "") + ".html";
+  const baseWithoutExt = info.fsPath.replace(SUPPORTED_DOC_EXT_RE, "");
+  const defaultHtmlPath = /\.html?$/i.test(info.fsPath)
+    ? `${baseWithoutExt}.standalone.html`
+    : `${baseWithoutExt}.html`;
   const saveUri = await vscode.window.showSaveDialog({
     defaultUri: vscode.Uri.file(defaultHtmlPath),
     filters: { "HTML Document": ["html"] },
@@ -2753,7 +3791,7 @@ async function exportMarkdownToHtml({ info, extensionPath, mode = "ask", compute
     try {
       rawText = fs.readFileSync(info.fsPath, "utf8");
     } catch (_) {
-      vscode.window.showErrorMessage(`Unable to read Markdown file: ${info.fsPath}`);
+      vscode.window.showErrorMessage(`Unable to read document file: ${info.fsPath}`);
       return;
     }
   }
@@ -2767,8 +3805,10 @@ async function exportMarkdownToHtml({ info, extensionPath, mode = "ask", compute
 
   let renderedHtml = "";
   try {
-    renderedHtml = await renderMarkdownWithCarousels(rawText, async (mdChunk) => {
-      return await vscode.commands.executeCommand("markdown.api.render", mdChunk);
+    renderedHtml = await renderDocumentContent(rawText, info, {
+      webview: null,
+      forExport: true,
+      exportType: "html"
     });
   } catch (_) {
     renderedHtml = `<pre>${escapeHtml(rawText)}</pre>`;
@@ -2815,13 +3855,14 @@ async function exportMarkdownToHtml({ info, extensionPath, mode = "ask", compute
     ? buildStandaloneThemeVarsCss(isLightTheme, computedVars)
     : `body.agy-review-body { --agy-bg: #ffffff !important; --agy-fg: #1e293b !important; background-color: #ffffff !important; color: #1e293b !important; }`;
 
-  const docTitle = formatDocumentTitle(info.fsPath);
+  const docTitle = formatDocumentTitle(info.fsPath, rawText);
+  const fmtInfo = (info && info.format) || detectDocumentFormat(info.realPath || info.fsPath);
   const fullHtml = `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>${escapeHtml(docTitle)} — Antigravity Markdown Review</title>
+  <title>${escapeHtml(docTitle)} — Antigravity Document Preview</title>
   <style id="agy-katex-css">${katexCssRaw}</style>
   <style id="agy-main-css">${mainCssRaw}</style>
   <style id="agy-theme-palette">${themeCss}</style>
@@ -2830,7 +3871,9 @@ async function exportMarkdownToHtml({ info, extensionPath, mode = "ask", compute
 <body class="agy-review-body ${bodyThemeClass}" data-real-path="${escapeHtml(info.realPath)}">
   <div class="agy-toolbar">
     <div class="agy-toolbar-left">
-      <span class="agy-doc-title agy-filepath" title="${escapeHtml(info.realPath)}">${escapeHtml(docTitle)}</span>
+      <span class="agy-format-badge" data-format="${escapeHtml(fmtInfo.id)}">${escapeHtml(fmtInfo.badge)}</span>
+      <span class="agy-doc-title agy-filepath" data-server-title="1" title="${escapeHtml(info.realPath)}">${escapeHtml(docTitle)}</span>
+      <span class="agy-doc-filename">${escapeHtml(path.basename(info.realPath || info.fsPath))}</span>
     </div>
     <div class="agy-toolbar-actions">
       <button type="button" class="agy-btn agy-btn-subtle" id="btn-toc" title="Toggle Table of Contents / Document Outline" aria-pressed="false">Outline</button>
@@ -2924,6 +3967,7 @@ function buildWebviewHtml({
   displayPath,
   realFilePath = "",
   docTitle,
+  formatInfo = null,
   isBrainArtifact,
   isSymlink,
   isLightTheme,
@@ -2933,6 +3977,8 @@ function buildWebviewHtml({
   initialLine = 0
 }) {
   const effectiveTitle = docTitle || formatDocumentTitle(displayPath);
+  const fmt = formatInfo || detectDocumentFormat(realFilePath || displayPath);
+  const fileBaseName = path.basename(String(realFilePath || displayPath || ""));
   const nativeMenuItem = isBrainArtifact
     ? `<button type="button" class="agy-menu-item" id="btn-native" title="Open in Native Antigravity Artifact Viewer"><span>Native Artifact Viewer ↗</span></button>`
     : "";
@@ -2949,19 +3995,21 @@ function buildWebviewHtml({
   <link rel="stylesheet" href="${katexCssUri}" />
   <link rel="stylesheet" href="${cssUri}?v=${ASSET_CACHE_VERSION}" />
   <style id="agy-theme-palette">${themeCss || ""}</style>
-  <title>Antigravity Markdown Review</title>
+  <title>Antigravity Document Preview</title>
 </head>
-<body class="agy-review-body ${themeClass}" data-real-path="${escapeHtml(realFilePath || displayPath)}">
+<body class="agy-review-body ${themeClass}" data-real-path="${escapeHtml(realFilePath || displayPath)}" data-format="${escapeHtml(fmt.id)}">
   <div class="agy-toolbar">
     <div class="agy-toolbar-left">
-      <span class="agy-doc-title agy-filepath" title="${escapeHtml(displayPath)}">${escapeHtml(effectiveTitle)}</span>
+      <span class="agy-format-badge" id="agy-format-badge" data-format="${escapeHtml(fmt.id)}" title="${escapeHtml(fmt.label || fmt.badge)}">${escapeHtml(fmt.badge)}</span>
+      <span class="agy-doc-title agy-filepath" data-server-title="1" title="${escapeHtml(displayPath)}">${escapeHtml(effectiveTitle)}</span>
+      <span class="agy-doc-filename" id="agy-doc-filename" title="${escapeHtml(displayPath)}">${escapeHtml(fileBaseName)}</span>
     </div>
     <div class="agy-toolbar-actions">
-      <button type="button" class="agy-btn agy-btn-subtle${syncActiveClass}${syncInlineHiddenClass}" id="btn-sync-inline" title="Toggle synchronized scrolling between raw Markdown and preview" aria-pressed="${syncScrollEnabled ? "true" : "false"}">⇅ Sync</button>
+      <button type="button" class="agy-btn agy-btn-subtle${syncActiveClass}${syncInlineHiddenClass}" id="btn-sync-inline" title="Toggle synchronized scrolling between raw source and preview" aria-pressed="${syncScrollEnabled ? "true" : "false"}">⇅ Sync</button>
       <button type="button" class="agy-btn agy-btn-subtle" id="btn-toc" title="Toggle Table of Contents / Document Outline" aria-pressed="false">Outline</button>
-      <button type="button" class="agy-btn agy-btn-subtle${splitActiveClass}" id="btn-split" title="Toggle raw Markdown editor beside this review" aria-pressed="${isSplitOpen ? "true" : "false"}">Split Edit</button>
+      <button type="button" class="agy-btn agy-btn-subtle${splitActiveClass}" id="btn-split" title="Toggle raw source editor beside this preview" aria-pressed="${isSplitOpen ? "true" : "false"}">Split Edit</button>
       <div class="agy-menu-wrap">
-        <button type="button" class="agy-btn-icon" id="btn-more" title="More review actions" aria-haspopup="true" aria-expanded="false">
+        <button type="button" class="agy-btn-icon" id="btn-more" title="More preview actions" aria-haspopup="true" aria-expanded="false">
           <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><circle cx="8" cy="3" r="1.35"/><circle cx="8" cy="8" r="1.35"/><circle cx="8" cy="13" r="1.35"/></svg>
         </button>
         <div class="agy-dropdown-menu" id="agy-more-menu" hidden>
@@ -2972,7 +4020,7 @@ function buildWebviewHtml({
           <button type="button" class="agy-menu-item" id="btn-export-html-themed" title="Export standalone interactive HTML with your active VS Code theme"><span>Export HTML (Themed)</span></button>
           <button type="button" class="agy-menu-item" id="btn-export-html-unthemed" title="Export standalone interactive HTML with clean light theme"><span>Export HTML (Unthemed)</span></button>
           <div class="agy-menu-divider"></div>
-          <button type="button" class="agy-menu-item" id="btn-copy"><span>Copy Raw Markdown</span></button>
+          <button type="button" class="agy-menu-item" id="btn-copy"><span>Copy Raw Source</span></button>
           <button type="button" class="agy-menu-item" id="btn-edit"><span>Switch to Raw Editor</span></button>
           ${nativeMenuItem}
           <div class="agy-menu-divider"></div>
@@ -3520,6 +4568,15 @@ function buildWebviewHtml({
         vscode.postMessage({ type: "revealLine", line: e.detail.line });
       });
 
+      window.addEventListener("agy.markdown.openExternalBrowser", () => {
+        vscode.postMessage({ type: "openExternalBrowser" });
+      });
+
+      window.addEventListener("agy.markdown.copyText", (e) => {
+        if (!e || !e.detail || typeof e.detail.text !== "string") return;
+        vscode.postMessage({ type: "copyText", text: e.detail.text });
+      });
+
       function applyThemeClass(isLight, themeCss) {
         if (!document.body) return;
         document.body.classList.toggle("vscode-light", Boolean(isLight));
@@ -3592,9 +4649,46 @@ function buildWebviewHtml({
       window.addEventListener("message", (event) => {
         const msg = event.data;
         if (!msg || !msg.type) return;
+        if (msg.type === "agy.iframe.scroll" && typeof msg.ratio === "number") {
+          if (!syncScrollEnabled) return;
+          if (performance.now() < programmaticScrollLockUntil) return;
+          const htmlStudio = document.querySelector(".agy-html-studio");
+          const totalLines = htmlStudio
+            ? Math.max(1, parseInt(htmlStudio.getAttribute("data-total-lines") || "1", 10))
+            : 100;
+          const line = Math.max(0, Math.min(totalLines - 1, msg.ratio * (totalLines - 1)));
+          const intLine = Math.round(line);
+          if (intLine !== lastEmittedIntLine) {
+            lastEmittedIntLine = intLine;
+            vscode.postMessage({ type: "revealLine", line });
+          }
+          return;
+        }
         if (msg.type === "scrollToLine" && typeof msg.line === "number") {
           if (!syncScrollEnabled) return;
           if (!msg.instant && performance.now() < userScrollActiveUntil) return;
+          const htmlIframe = document.getElementById("agy-html-iframe");
+          const htmlWebPane = document.querySelector('.agy-html-studio [data-html-pane="webview"]');
+          if (
+            htmlIframe &&
+            htmlIframe.contentWindow &&
+            htmlWebPane &&
+            !htmlWebPane.hidden
+          ) {
+            const htmlStudio = document.querySelector(".agy-html-studio");
+            const totalLines = htmlStudio
+              ? Math.max(1, parseInt(htmlStudio.getAttribute("data-total-lines") || "1", 10))
+              : 100;
+            const ratio = totalLines > 1 ? Math.max(0, Math.min(1, msg.line / (totalLines - 1))) : 0;
+            programmaticScrollLockUntil = performance.now() + 220;
+            try {
+              htmlIframe.contentWindow.postMessage(
+                { type: "agy.iframe.scrollToRatio", ratio, instant: Boolean(msg.instant) },
+                "*"
+              );
+            } catch (_) {}
+            return;
+          }
           scrollToSourceLine(msg.line, Boolean(msg.instant));
           return;
         }
@@ -3644,6 +4738,23 @@ function buildWebviewHtml({
                 ? msg.docTitle
                 : msg.displayPath;
             filepathEl.setAttribute("title", msg.displayPath);
+            filepathEl.setAttribute("data-server-title", "1");
+          }
+          const badgeEl = document.getElementById("agy-format-badge");
+          if (badgeEl && typeof msg.formatBadge === "string" && msg.formatBadge) {
+            badgeEl.textContent = msg.formatBadge;
+            if (typeof msg.formatId === "string" && msg.formatId) {
+              badgeEl.setAttribute("data-format", msg.formatId);
+              if (document.body) {
+                document.body.setAttribute("data-format", msg.formatId);
+              }
+            }
+          }
+          const filenameEl = document.getElementById("agy-doc-filename");
+          if (filenameEl && typeof msg.displayPath === "string") {
+            const parts = msg.displayPath.split(/[\\/]/);
+            filenameEl.textContent = parts[parts.length - 1] || "";
+            filenameEl.setAttribute("title", msg.displayPath);
           }
           if (contentEl && typeof msg.renderedHtml === "string") {
             contentEl.innerHTML = msg.renderedHtml;
@@ -3922,7 +5033,7 @@ async function triggerExportPdfCommand(uri, mode, extensionPath) {
     targetUri = vscode.window.activeTextEditor.document.uri;
   }
   if (!targetUri) {
-    vscode.window.showInformationMessage("Open a Markdown file first to export to PDF.");
+    vscode.window.showInformationMessage("Open a supported document first to export to PDF.");
     return;
   }
   const info = resolveRealFileInfo(targetUri);
@@ -3955,7 +5066,7 @@ async function triggerExportHtmlCommand(uri, mode, extensionPath) {
     targetUri = vscode.window.activeTextEditor.document.uri;
   }
   if (!targetUri) {
-    vscode.window.showInformationMessage("Open a Markdown file first to export to HTML.");
+    vscode.window.showInformationMessage("Open a supported document first to export to HTML.");
     return;
   }
   const info = resolveRealFileInfo(targetUri);
@@ -4030,7 +5141,7 @@ async function promptGitHubOrReportIssue(info) {
       }
     ],
     {
-      title: "Antigravity Markdown Review — GitHub & Diagnostics",
+      title: "Antigravity Document Preview — GitHub & Diagnostics",
       placeHolder: "Choose an action"
     }
   );
@@ -4173,7 +5284,7 @@ async function showTelemetryAndMarketplaceStats() {
 
   const totalAcquisitions = mkt ? (mkt.install || 0) + (mkt.downloadCount || 0) : null;
   const lines = [
-    `# Antigravity Markdown Review — Telemetry & Marketplace Report`,
+    `# Antigravity Document Preview — Telemetry & Marketplace Report`,
     ``,
     `- **Extension**: \`${EXTENSION_ID}\` (local \`v${EXTENSION_VERSION}\`${mkt ? `, Marketplace \`v${mkt.version}\`` : ""})`,
     `- **Your Telemetry Status**: **${authorStatus}**`,

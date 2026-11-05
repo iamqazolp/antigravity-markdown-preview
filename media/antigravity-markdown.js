@@ -1644,6 +1644,12 @@
       '<svg class="agy-file-icon" viewBox="0 0 16 16" width="13" height="13" aria-hidden="true" style="color:#2563eb"><path fill="currentColor" d="M5.8 6.4v6.6H4.4V6.4H2.4V5.2h5.4v1.2H5.8Zm5.6 6.7c-1.2 0-2-.5-2.5-1.2l.9-.8c.4.5.8.8 1.5.8.6 0 1-.3 1-.7 0-.5-.4-.7-1.2-1l-.5-.2c-1.2-.5-1.8-1-1.8-2.1 0-1.2.9-2 2.2-2 1 0 1.7.3 2.1.9l-.9.8c-.3-.4-.7-.6-1.2-.6-.6 0-.9.3-.9.6 0 .4.3.6 1.1.9l.5.2c1.3.5 1.9 1.1 1.9 2.2 0 1.3-1.1 2.2-2.5 2.2Z"/></svg>',
     css:
       '<svg class="agy-file-icon" viewBox="0 0 16 16" width="13" height="13" aria-hidden="true" style="color:#3b82f6"><path fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" d="M5.5 3.2c-1.2 0-1.8.6-1.8 1.7v1.7c0 .8-.5 1.4-1.4 1.4.9 0 1.4.6 1.4 1.4v1.7c0 1.1.6 1.7 1.8 1.7M10.5 3.2c1.2 0 1.8.6 1.8 1.7v1.7c0 .8.5 1.4 1.4 1.4-.9 0-1.4.6-1.4 1.4v1.7c0 1.1-.6 1.7-1.8 1.7"/></svg>',
+    html:
+      '<svg class="agy-file-icon" viewBox="0 0 16 16" width="13" height="13" aria-hidden="true" style="color:#f97316"><path fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" d="M5.2 4.2 1.8 8l3.4 3.8M10.8 4.2 14.2 8l-3.4 3.8M9.2 2.8 6.8 13.2"/></svg>',
+    svg:
+      '<svg class="agy-file-icon" viewBox="0 0 16 16" width="13" height="13" aria-hidden="true" style="color:#ec4899"><circle cx="8" cy="8" r="5.8" fill="none" stroke="currentColor" stroke-width="1.4"/><circle cx="6" cy="6.5" r="1" fill="currentColor"/><path fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" d="m3.5 11.2 3-3 2.2 2.1 2-2.3 2 2.5"/></svg>',
+    table:
+      '<svg class="agy-file-icon" viewBox="0 0 16 16" width="13" height="13" aria-hidden="true" style="color:#14b8a6"><rect x="2" y="2.5" width="12" height="11" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.4"/><path fill="none" stroke="currentColor" stroke-width="1.3" d="M2 6.2h12M2 9.8h12M6.5 2.5v11"/></svg>',
     file:
       '<svg class="agy-file-icon" viewBox="0 0 16 16" width="13" height="13" aria-hidden="true" style="color:#64748b"><path fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" d="M4 2h5.5L13 5.5V14H4V2Z"/><path fill="none" stroke="currentColor" stroke-width="1.3" d="M9.2 2v3.8H13"/></svg>'
   };
@@ -1667,13 +1673,22 @@
     ) {
       return FILE_ICON_SVGS.ignore;
     }
-    if (/\.(?:md|markdown|mdx)$/i.test(rawName)) {
+    if (/\.(?:md|markdown|mdx|qmd|rmd)$/i.test(rawName)) {
       return FILE_ICON_SVGS.markdown;
+    }
+    if (/\.(?:html|htm)$/i.test(rawName)) {
+      return FILE_ICON_SVGS.html;
+    }
+    if (/\.(?:svg|mmd|mermaid|png|jpg|jpeg|gif|webp)$/i.test(rawName)) {
+      return FILE_ICON_SVGS.svg;
+    }
+    if (/\.(?:csv|tsv|parquet)$/i.test(rawName)) {
+      return FILE_ICON_SVGS.table;
     }
     if (/\.(?:py|pyi|ipynb)$/i.test(rawName)) {
       return FILE_ICON_SVGS.python;
     }
-    if (/\.(?:json|jsonc|jsonl|toml|yaml|yml)$/i.test(rawName)) {
+    if (/\.(?:json|jsonc|jsonl|ndjson|toml|yaml|yml)$/i.test(rawName)) {
       return FILE_ICON_SVGS.package;
     }
     if (/\.(?:ts|tsx|mts|cts)$/i.test(rawName)) {
@@ -1758,18 +1773,39 @@
       });
   }
 
+  const CLIENT_ACRONYMS = new Set([
+    "AI", "API", "AST", "AWS", "CLI", "CPU", "CSS", "CSV", "DB", "DOM", "ER", "FAQ", "GCP", "GFM",
+    "GPU", "GUI", "HTML", "HTTP", "HTTPS", "ID", "IDE", "IO", "IP", "IPC", "JS", "JSON", "JSONL",
+    "JSX", "JWT", "LLM", "MCP", "MD", "MDX", "ML", "MPE", "NDJSON", "NLP", "NPM", "OK", "OS",
+    "PDF", "PR", "QA", "QMD", "RAG", "REST", "RFC", "RMD", "RPC", "SDK", "SH", "SQL", "SSH",
+    "SSL", "SSR", "SVG", "TCP", "TLS", "TOC", "TOML", "TS", "TSV", "TSX", "UI", "URI", "URL",
+    "UTF", "UUID", "UX", "VM", "VSIX", "WASM", "XML", "YAML", "YML"
+  ]);
+
   function formatDocumentTitle(filePathOrDisplay) {
     const raw = String(filePathOrDisplay || "").trim();
-    if (!raw) return "Markdown Review";
+    if (!raw) return "Document Preview";
     const leftSide = raw.includes("→") ? raw.split("→")[0].trim() : raw;
     const baseName = leftSide.split(/[\\/]/).pop() || leftSide;
-    const withoutExt = baseName.replace(/\.(?:md|markdown|mdx)$/i, "");
+    const withoutExt = baseName.replace(
+      /\.(?:md|markdown|mdx|qmd|rmd|html|htm|svg|mmd|mermaid|csv|tsv|jsonl|ndjson)$/i,
+      ""
+    );
     if (!withoutExt) return baseName;
-    if (/^[A-Z0-9_-]+$/.test(withoutExt) && /[_-]/.test(withoutExt)) {
+    if (/^(?:README|CHANGELOG|LICENSE|CONTRIBUTING|SECURITY|AUTHORS|CODEOWNERS|NOTICE|PATENTS)$/i.test(withoutExt)) {
+      return withoutExt.toUpperCase();
+    }
+    if (/[_-]/.test(withoutExt)) {
       return withoutExt
         .split(/[_-]+/)
         .filter(Boolean)
-        .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+        .map((w) => {
+          const up = w.toUpperCase();
+          if (CLIENT_ACRONYMS.has(up)) return up;
+          if (/^v?\d+(?:\.\d+)*$/i.test(w)) return w.toLowerCase();
+          if (/[a-z]/.test(w) && /[A-Z]/.test(w.slice(1))) return w;
+          return w.charAt(0).toUpperCase() + w.slice(1).toLowerCase();
+        })
         .join(" ");
     }
     return withoutExt;
@@ -1791,9 +1827,11 @@
       if (rawTitle && !fpEl.getAttribute("title")) {
         fpEl.setAttribute("title", rawTitle);
       }
-      const cleanTitle = formatDocumentTitle(rawTitle);
-      if (cleanTitle && fpEl.textContent !== cleanTitle) {
-        fpEl.textContent = cleanTitle;
+      if (fpEl.getAttribute("data-server-title") !== "1") {
+        const cleanTitle = formatDocumentTitle(rawTitle);
+        if (cleanTitle && fpEl.textContent !== cleanTitle) {
+          fpEl.textContent = cleanTitle;
+        }
       }
     }
 
@@ -2439,6 +2477,428 @@
     });
   }
 
+  function decodeBase64Utf8(b64) {
+    if (!b64) return "";
+    try {
+      const bin = atob(b64);
+      const bytes = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) {
+        bytes[i] = bin.charCodeAt(i);
+      }
+      if (typeof TextDecoder !== "undefined") {
+        return new TextDecoder("utf-8").decode(bytes);
+      }
+      return decodeURIComponent(escape(bin));
+    } catch (_) {
+      return "";
+    }
+  }
+
+  function bindStagePanZoom(stage, canvas, btnOut, btnReset, btnIn) {
+    if (!stage || !canvas) return;
+    let scale = 1;
+    let tx = 0;
+    let ty = 0;
+    let dragging = false;
+    let startX = 0;
+    let startY = 0;
+
+    const apply = () => {
+      canvas.style.transform = `translate(${Math.round(tx)}px, ${Math.round(ty)}px) scale(${scale.toFixed(3)})`;
+      if (btnReset) {
+        btnReset.textContent = `${Math.round(scale * 100)}%`;
+      }
+    };
+
+    if (btnOut) {
+      btnOut.addEventListener("click", (e) => {
+        e.stopPropagation();
+        scale = Math.max(0.25, Math.round((scale / 1.2) * 100) / 100);
+        apply();
+      });
+    }
+    if (btnIn) {
+      btnIn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        scale = Math.min(8, Math.round(scale * 1.2 * 100) / 100);
+        apply();
+      });
+    }
+    if (btnReset) {
+      btnReset.addEventListener("click", (e) => {
+        e.stopPropagation();
+        scale = 1;
+        tx = 0;
+        ty = 0;
+        apply();
+      });
+    }
+
+    stage.addEventListener(
+      "wheel",
+      (e) => {
+        if (!e.ctrlKey && !e.metaKey && Math.abs(e.deltaY) < 4) return;
+        e.preventDefault();
+        const factor = e.deltaY < 0 ? 1.12 : 1 / 1.12;
+        scale = Math.min(8, Math.max(0.25, scale * factor));
+        apply();
+      },
+      { passive: false }
+    );
+
+    stage.addEventListener("pointerdown", (e) => {
+      if (e.button !== 0) return;
+      dragging = true;
+      startX = e.clientX - tx;
+      startY = e.clientY - ty;
+      stage.classList.add("dragging");
+      try {
+        stage.setPointerCapture(e.pointerId);
+      } catch (_) {}
+    });
+    stage.addEventListener("pointermove", (e) => {
+      if (!dragging) return;
+      tx = e.clientX - startX;
+      ty = e.clientY - startY;
+      apply();
+    });
+    const stopDrag = () => {
+      dragging = false;
+      stage.classList.remove("dragging");
+    };
+    stage.addEventListener("pointerup", stopDrag);
+    stage.addEventListener("pointercancel", stopDrag);
+    stage.addEventListener("dblclick", () => {
+      scale = 1;
+      tx = 0;
+      ty = 0;
+      apply();
+    });
+  }
+
+  function initFormatStudios(root) {
+    // 1. HTML Studio
+    root
+      .querySelectorAll(".agy-html-studio:not([data-agy-studio-bound='1'])")
+      .forEach((studio) => {
+        studio.setAttribute("data-agy-studio-bound", "1");
+        const modeBtns = studio.querySelectorAll("[data-html-mode]");
+        const panes = studio.querySelectorAll("[data-html-pane]");
+        const webTools = studio.querySelector("#agy-html-webview-tools");
+        const iframeWrap = studio.querySelector("#agy-html-iframe-wrap");
+        const iframe = studio.querySelector("#agy-html-iframe");
+
+        modeBtns.forEach((btn) => {
+          btn.addEventListener("click", () => {
+            const targetMode = btn.getAttribute("data-html-mode");
+            modeBtns.forEach((b) =>
+              b.classList.toggle("active", b === btn)
+            );
+            panes.forEach((p) => {
+              p.hidden = p.getAttribute("data-html-pane") !== targetMode;
+            });
+            if (webTools) {
+              webTools.style.display = targetMode === "webview" ? "" : "none";
+            }
+            window.dispatchEvent(new CustomEvent("agy.markdown.layoutChanged"));
+          });
+        });
+
+        const bgBtns = studio.querySelectorAll("[data-html-bg]");
+        bgBtns.forEach((btn) => {
+          btn.addEventListener("click", () => {
+            const bg = btn.getAttribute("data-html-bg") || "auto";
+            bgBtns.forEach((b) => b.classList.toggle("active", b === btn));
+            if (iframeWrap) {
+              iframeWrap.setAttribute("data-canvas-bg", bg);
+            }
+          });
+        });
+
+        const widthBtns = studio.querySelectorAll("[data-html-width]");
+        widthBtns.forEach((btn) => {
+          btn.addEventListener("click", () => {
+            const w = btn.getAttribute("data-html-width") || "100%";
+            widthBtns.forEach((b) => b.classList.toggle("active", b === btn));
+            if (iframe) {
+              iframe.style.maxWidth = w === "100%" ? "100%" : w;
+            }
+          });
+        });
+
+        const openBrowserBtn = studio.querySelector("#agy-html-open-browser");
+        if (openBrowserBtn) {
+          openBrowserBtn.addEventListener("click", () => {
+            window.dispatchEvent(new CustomEvent("agy.markdown.openExternalBrowser"));
+          });
+        }
+      });
+
+    // 2. SVG Studio
+    root
+      .querySelectorAll(".agy-svg-studio:not([data-agy-studio-bound='1'])")
+      .forEach((studio) => {
+        studio.setAttribute("data-agy-studio-bound", "1");
+        const stage = studio.querySelector("#agy-svg-stage");
+        const canvas = studio.querySelector("#agy-svg-canvas");
+        const surfBtns = studio.querySelectorAll("[data-studio-surface]");
+        surfBtns.forEach((btn) => {
+          btn.addEventListener("click", () => {
+            const surf = btn.getAttribute("data-studio-surface") || "checkerboard";
+            surfBtns.forEach((b) => b.classList.toggle("active", b === btn));
+            if (stage) stage.setAttribute("data-surface", surf);
+          });
+        });
+
+        bindStagePanZoom(
+          stage,
+          canvas,
+          studio.querySelector("#agy-svg-zoom-out"),
+          studio.querySelector("#agy-svg-zoom-reset"),
+          studio.querySelector("#agy-svg-zoom-in")
+        );
+
+        const getRawSvg = () => {
+          const b64 = studio.getAttribute("data-raw-svg-b64") || "";
+          const decoded = decodeBase64Utf8(b64);
+          if (decoded) return decoded;
+          return stage ? extractSvgMarkupFromContainer(stage) : "";
+        };
+
+        const btnCopyRaw = studio.querySelector("#agy-svg-copy-raw");
+        if (btnCopyRaw) {
+          btnCopyRaw.addEventListener("click", () => {
+            const rawSvg = getRawSvg();
+            if (!rawSvg) return;
+            copyToClipboard(rawSvg).then(() => {
+              btnCopyRaw.textContent = "✓ SVG";
+              setTimeout(() => {
+                btnCopyRaw.textContent = "Copy SVG";
+              }, 1400);
+            });
+          });
+        }
+
+        const btnCopyUri = studio.querySelector("#agy-svg-copy-datauri");
+        if (btnCopyUri) {
+          btnCopyUri.addEventListener("click", () => {
+            const rawSvg = getRawSvg();
+            if (!rawSvg) return;
+            const uri = "data:image/svg+xml;utf8," + encodeURIComponent(rawSvg);
+            copyToClipboard(uri).then(() => {
+              btnCopyUri.textContent = "✓ Data URI";
+              setTimeout(() => {
+                btnCopyUri.textContent = "Copy Data URI";
+              }, 1400);
+            });
+          });
+        }
+
+        const btnExpand = studio.querySelector("#agy-svg-expand");
+        if (btnExpand && canvas) {
+          btnExpand.addEventListener("click", () => {
+            const svgEl = canvas.querySelector("svg");
+            if (!svgEl) return;
+            openInLightbox(svgEl.cloneNode(true), "SVG Vector Graphic — Interactive Pan & Zoom");
+          });
+        }
+      });
+
+    // 3. Standalone Mermaid Studio
+    root
+      .querySelectorAll(".agy-mermaid-studio:not([data-agy-studio-bound='1'])")
+      .forEach((studio) => {
+        studio.setAttribute("data-agy-studio-bound", "1");
+        const stage = studio.querySelector("#agy-mmd-stage");
+        const canvas = studio.querySelector("#agy-mmd-canvas");
+        const surfBtns = studio.querySelectorAll("[data-studio-surface]");
+        surfBtns.forEach((btn) => {
+          btn.addEventListener("click", () => {
+            const surf = btn.getAttribute("data-studio-surface") || "theme";
+            surfBtns.forEach((b) => b.classList.toggle("active", b === btn));
+            if (stage) stage.setAttribute("data-surface", surf);
+          });
+        });
+
+        bindStagePanZoom(
+          stage,
+          canvas,
+          studio.querySelector("#agy-mmd-zoom-out"),
+          studio.querySelector("#agy-mmd-zoom-reset"),
+          studio.querySelector("#agy-mmd-zoom-in")
+        );
+
+        const btnCopySvg = studio.querySelector("#agy-mmd-copy-svg");
+        if (btnCopySvg && stage) {
+          btnCopySvg.addEventListener("click", () => {
+            const svgMarkup = extractSvgMarkupFromContainer(stage);
+            if (!svgMarkup) return;
+            copyToClipboard(svgMarkup).then(() => {
+              btnCopySvg.textContent = "✓ SVG";
+              setTimeout(() => {
+                btnCopySvg.textContent = "Copy SVG";
+              }, 1400);
+            });
+          });
+        }
+
+        const btnExpand = studio.querySelector("#agy-mmd-expand");
+        if (btnExpand && stage) {
+          btnExpand.addEventListener("click", () => {
+            const mediaEl = stage.querySelector("img.agy-mermaid-img, svg");
+            if (!mediaEl) return;
+            openInLightbox(mediaEl.cloneNode(true), "Mermaid Diagram — Interactive Pan & Zoom");
+          });
+        }
+      });
+
+    // 4. CSV / TSV Table Studio
+    root
+      .querySelectorAll(".agy-csv-studio:not([data-agy-studio-bound='1'])")
+      .forEach((studio) => {
+        studio.setAttribute("data-agy-studio-bound", "1");
+        const table = studio.querySelector("#agy-csv-table");
+        const tbody = table ? table.querySelector("tbody") : null;
+        const searchInput = studio.querySelector("#agy-csv-search");
+        const countBadge = studio.querySelector("#agy-csv-count-badge");
+        if (!table || !tbody) return;
+
+        const allRows = Array.from(tbody.querySelectorAll("tr"));
+        const colCount = table.querySelectorAll("thead th.agy-sortable-th").length;
+
+        if (searchInput) {
+          searchInput.addEventListener("input", () => {
+            const q = (searchInput.value || "").trim().toLowerCase();
+            let shown = 0;
+            allRows.forEach((tr) => {
+              const match = !q || (tr.textContent || "").toLowerCase().includes(q);
+              tr.hidden = !match;
+              if (match) shown++;
+            });
+            if (countBadge) {
+              countBadge.textContent = q
+                ? `Showing ${shown.toLocaleString()} of ${allRows.length.toLocaleString()} rows · ${colCount} cols`
+                : `${allRows.length.toLocaleString()} rows · ${colCount} cols`;
+            }
+          });
+        }
+
+        const headers = Array.from(table.querySelectorAll("thead th.agy-sortable-th"));
+        let currentSortCol = -1;
+        let currentSortAsc = true;
+
+        headers.forEach((th) => {
+          th.addEventListener("click", () => {
+            const colIdx = parseInt(th.getAttribute("data-col-idx") || "0", 10);
+            if (currentSortCol === colIdx) {
+              currentSortAsc = !currentSortAsc;
+            } else {
+              currentSortCol = colIdx;
+              currentSortAsc = true;
+            }
+
+            headers.forEach((h) => {
+              const ind = h.querySelector(".agy-sort-indicator");
+              if (!ind) return;
+              if (h === th) {
+                ind.textContent = currentSortAsc ? "▲" : "▼";
+                h.classList.add("sorted");
+              } else {
+                ind.textContent = "⇅";
+                h.classList.remove("sorted");
+              }
+            });
+
+            const cellIndex = colIdx + 1; // +1 for row-number column
+            const sorted = allRows.slice().sort((rowA, rowB) => {
+              const aTxt = ((rowA.cells[cellIndex] && rowA.cells[cellIndex].textContent) || "").trim();
+              const bTxt = ((rowB.cells[cellIndex] && rowB.cells[cellIndex].textContent) || "").trim();
+              const aNum = Number(aTxt.replace(/,/g, ""));
+              const bNum = Number(bTxt.replace(/,/g, ""));
+              if (aTxt !== "" && bTxt !== "" && !Number.isNaN(aNum) && !Number.isNaN(bNum)) {
+                return currentSortAsc ? aNum - bNum : bNum - aNum;
+              }
+              return currentSortAsc
+                ? aTxt.localeCompare(bTxt, undefined, { numeric: true, sensitivity: "base" })
+                : bTxt.localeCompare(aTxt, undefined, { numeric: true, sensitivity: "base" });
+            });
+
+            sorted.forEach((tr) => tbody.appendChild(tr));
+          });
+        });
+      });
+
+    // 5. JSONL / Conversation Transcript Studio
+    root
+      .querySelectorAll(".agy-jsonl-studio:not([data-agy-studio-bound='1'])")
+      .forEach((studio) => {
+        studio.setAttribute("data-agy-studio-bound", "1");
+        const cards = Array.from(studio.querySelectorAll(".agy-jsonl-step-card"));
+        const filterBtns = Array.from(studio.querySelectorAll("[data-jsonl-filter]"));
+        const searchInput = studio.querySelector("#agy-jsonl-search");
+        const expandAllBtn = studio.querySelector("#agy-jsonl-expand-all");
+        let activeFilter = "all";
+
+        const applyFilter = () => {
+          const q = searchInput ? (searchInput.value || "").trim().toLowerCase() : "";
+          cards.forEach((card) => {
+            const cat = card.getAttribute("data-step-cat") || "";
+            const hasTools = card.getAttribute("data-has-tools") === "1";
+            const isError = card.getAttribute("data-is-error") === "1";
+            let roleMatch = true;
+            if (activeFilter === "user") roleMatch = cat === "user";
+            else if (activeFilter === "planner") roleMatch = cat === "planner";
+            else if (activeFilter === "tool") roleMatch = hasTools;
+            else if (activeFilter === "error") roleMatch = isError;
+
+            const textMatch = !q || (card.textContent || "").toLowerCase().includes(q);
+            card.hidden = !(roleMatch && textMatch);
+          });
+          window.dispatchEvent(new CustomEvent("agy.markdown.layoutChanged"));
+        };
+
+        filterBtns.forEach((btn) => {
+          btn.addEventListener("click", () => {
+            activeFilter = btn.getAttribute("data-jsonl-filter") || "all";
+            filterBtns.forEach((b) => b.classList.toggle("active", b === btn));
+            applyFilter();
+          });
+        });
+
+        if (searchInput) {
+          searchInput.addEventListener("input", applyFilter);
+        }
+
+        if (expandAllBtn) {
+          let allExpanded = false;
+          expandAllBtn.addEventListener("click", () => {
+            allExpanded = !allExpanded;
+            studio.querySelectorAll(".agy-jsonl-timeline details").forEach((d) => {
+              d.open = allExpanded;
+            });
+            expandAllBtn.textContent = allExpanded ? "Collapse All" : "Expand All";
+            window.dispatchEvent(new CustomEvent("agy.markdown.layoutChanged"));
+          });
+        }
+
+        studio.querySelectorAll(".agy-copy-json-btn").forEach((btn) => {
+          btn.addEventListener("click", (e) => {
+            e.stopPropagation();
+            const b64 = btn.getAttribute("data-raw-json-b64") || "";
+            const rawJson = decodeBase64Utf8(b64);
+            if (!rawJson) return;
+            copyToClipboard(rawJson).then(() => {
+              const orig = btn.textContent;
+              btn.textContent = "✓ Copied";
+              setTimeout(() => {
+                btn.textContent = orig;
+              }, 1400);
+            });
+          });
+        });
+      });
+  }
+
   let isEnhancing = false;
   function enhanceAll() {
     const root = document.body;
@@ -2458,6 +2918,7 @@
       attachMermaidToolbars(root);
       transformCodeBlocks(root);
       bindInteractiveCarousels(root);
+      initFormatStudios(root);
       decorateLinks(root);
       refreshTableOfContents(root);
       initSelectionCitationPill();

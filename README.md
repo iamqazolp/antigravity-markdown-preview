@@ -1,4 +1,4 @@
-# Antigravity Markdown Review
+# Antigravity Document Preview
 
 [![VS Code Marketplace Version](https://img.shields.io/visual-studio-marketplace/v/iamqazolp.agy-markdown-review?label=VS%20Code%20Marketplace&logo=visual-studio-code&color=22c55e)](https://marketplace.visualstudio.com/items?itemName=iamqazolp.agy-markdown-review)
 [![VS Code Marketplace Downloads](https://img.shields.io/visual-studio-marketplace/d/iamqazolp.agy-markdown-review?label=Downloads&color=38bdf8)](https://marketplace.visualstudio.com/items?itemName=iamqazolp.agy-markdown-review)
@@ -6,19 +6,33 @@
 [![Report Issue](https://img.shields.io/badge/Issues-Report%20Bug%20%2F%20Feature-f59e0b?logo=github)](https://github.com/iamqazolp/antigravity-markdown-preview/issues)
 [![License: MIT](https://img.shields.io/badge/License-MIT-a855f7.svg)](https://github.com/iamqazolp/antigravity-markdown-preview/blob/main/LICENSE)
 
-**Google Antigravity's native Artifact Viewer styling, theme-adaptive syntax highlighting, full-bleed PDF export, interactive carousels, and 60fps bidirectional scroll sync for VS Code, Cursor, Windsurf, and Antigravity IDE.**
+**Google Antigravity's native Artifact Viewer styling, multi-format document studios (Markdown, MDX, Quarto, RMD, HTML, SVG, Mermaid, CSV/TSV, JSONL transcripts), theme-adaptive syntax highlighting, full-bleed PDF & HTML export, interactive carousels, and 60fps bidirectional scroll sync for VS Code, Cursor, Windsurf, and Antigravity IDE.**
 
-![Antigravity Markdown Review Showcase](https://raw.githubusercontent.com/iamqazolp/antigravity-markdown-preview/main/media/screenshots/demo-showcase.gif)
+![Antigravity Document Preview Showcase](https://raw.githubusercontent.com/iamqazolp/antigravity-markdown-preview/main/media/screenshots/demo-showcase.gif)
 
 ---
 
 ## ✨ Overview
 
-**Antigravity Markdown Review** (`iamqazolp.agy-markdown-review`) brings Google Antigravity's Artifact Viewer experience to every Markdown file in your workspace. It works seamlessly across all three Markdown engines:
+**Antigravity Document Preview** (`iamqazolp.agy-markdown-review`, formerly *Antigravity Markdown Review*) brings Google Antigravity's Artifact Viewer experience to **14 document, web, diagram, table, and transcript formats** in your workspace:
 
-1. **Antigravity Markdown Review Custom Editor** (`antigravity.markdownReview`) — opens `.md` files directly in a clean review canvas with a sticky toolbar and 1-click **Split Edit**.
+1. **Antigravity Document Preview Custom Editor** (`antigravity.markdownReview`) — opens supported files directly in a rich preview canvas with a format badge (`MD`, `MDX`, `QMD`, `RMD`, `HTML`, `SVG`, `MMD`, `CSV`, `TSV`, `JSONL`), smart document title extraction (frontmatter `title:`, HTML `<title>`, and acronym-aware title casing), and 1-click **Split Edit**.
 2. **VS Code Built-in Markdown Preview** (`markdown.showPreview`).
 3. **Markdown Preview Enhanced** (`shd101wyy.markdown-preview-enhanced` / Crossnote).
+
+---
+
+## 🗂️ Multi-Format Studios (`.md`, `.mdx`, `.qmd`, `.rmd`, `.html`, `.svg`, `.mmd`, `.csv`, `.tsv`, `.jsonl`)
+
+All supported formats open directly in **Antigravity Document Preview** by default with **Split Edit**, live reload, and **Themed / Unthemed PDF & Standalone HTML export**:
+
+| Format Family | Extensions | Studio Capabilities |
+| :--- | :--- | :--- |
+| **Markdown & Variants** | `.md`, `.markdown`, `.mdx`, `.qmd`, `.rmd` | YAML frontmatter metadata card, Quarto `{python}` / `{r}` / `{mermaid}` executable code chunks & `::: {.callout-*}` blocks, MDX `import`/`export` module cards & `<Note>` / `<Tip>` / `<Warning>` / `<Caution>` / `<Callout>` JSX components |
+| **HTML Documents** | `.html`, `.htm` | **🌐 Web View** (sandboxed live preview with local asset resolution, canvas background `Auto`/`Light`/`Dark` toggle, responsive viewport widths `100%`/`1024px`/`768px`/`390px`, `↗ Browser` launcher & scroll sync), **✨ Reader View** (Antigravity typography), and **</> Source** view |
+| **Vector & Diagrams** | `.svg`, `.mmd`, `.mermaid` | Interactive pan/zoom Studio canvas (`0.25x`–`8x`), surface background switcher (`Checkerboard` grid, `Theme`, `Light`, `Dark`), dimension & node count badges, `Copy SVG`, `Copy Data URI`, fullscreen Lightbox, and collapsible syntax-highlighted source |
+| **Data Tables** | `.csv`, `.tsv` | RFC-4180 parser, sticky headers, live row filter search box, clickable sortable columns (`▲`/`▼`), numeric/boolean cell styling, row number gutter with `data-line` sync, `Copy MD`, and `Copy CSV` |
+| **JSONL & Agent Transcripts** | `.jsonl`, `.ndjson` | Auto-detects **Antigravity Conversation Transcripts** (`step_index`, `source`, `type`, `content`, `thinking`, `tool_calls`) vs generic JSONL datasets; renders role-colored step cards, role filter pills (`All`, `💬 User`, `🤖 Planner`, `🔧 Tools`, `⚠️ Errors`), live search, `Expand All`, and `Copy JSON` |
 
 ---
 
@@ -83,15 +97,15 @@ class FlashAttentionBlock(nn.Module):
 
 | Command ID | Title | Description |
 | :--- | :--- | :--- |
-| `agyMarkdown.openReview` | **Antigravity: Open Markdown Review** | Open the current Markdown file in the Antigravity Review editor |
-| `agyMarkdown.openReviewBeside` | **Antigravity: Open Markdown Review to the Side** | Open the Antigravity Review editor in a side split |
-| `agyMarkdown.exportPdf` | **Antigravity: Export Markdown to PDF…** | Choose between **Themed PDF** (active VS Code theme) and **Unthemed PDF** (clean print white) |
-| `agyMarkdown.exportPdfThemed` | **Antigravity: Export Markdown to PDF (Themed)** | Export a full-bleed PDF preserving your active VS Code theme background, surfaces & syntax colors |
-| `agyMarkdown.exportPdfUnthemed` | **Antigravity: Export Markdown to PDF (Unthemed)** | Export a print-friendly PDF with a crisp white background and high-contrast light syntax palette |
-| `agyMarkdown.exportHtml` | **Antigravity: Export Markdown to Standalone HTML…** | Choose between **Themed HTML** (active VS Code theme) and **Unthemed HTML** (clean light) |
-| `agyMarkdown.exportHtmlThemed` | **Antigravity: Export Markdown to Standalone HTML (Themed)** | Export a 100% self-contained interactive `.html` file with your active VS Code theme |
-| `agyMarkdown.exportHtmlUnthemed` | **Antigravity: Export Markdown to Standalone HTML (Unthemed)** | Export a 100% self-contained interactive `.html` file with a clean light theme |
-| `agyMarkdown.editSource` | **Antigravity: Edit Raw Markdown** | Toggle the side-by-side raw Markdown source editor |
+| `agyMarkdown.openReview` | **Antigravity: Open Document Preview** | Open the current document in the Antigravity Document Preview editor |
+| `agyMarkdown.openReviewBeside` | **Antigravity: Open Document Preview to the Side** | Open the Antigravity Document Preview editor in a side split |
+| `agyMarkdown.exportPdf` | **Antigravity: Export Document to PDF…** | Choose between **Themed PDF** (active VS Code theme) and **Unthemed PDF** (clean print white) |
+| `agyMarkdown.exportPdfThemed` | **Antigravity: Export Document to PDF (Themed)** | Export a full-bleed PDF preserving your active VS Code theme background, surfaces & syntax colors |
+| `agyMarkdown.exportPdfUnthemed` | **Antigravity: Export Document to PDF (Unthemed)** | Export a print-friendly PDF with a crisp white background and high-contrast light syntax palette |
+| `agyMarkdown.exportHtml` | **Antigravity: Export Document to Standalone HTML…** | Choose between **Themed HTML** (active VS Code theme) and **Unthemed HTML** (clean light) |
+| `agyMarkdown.exportHtmlThemed` | **Antigravity: Export Document to Standalone HTML (Themed)** | Export a 100% self-contained interactive `.html` file with your active VS Code theme |
+| `agyMarkdown.exportHtmlUnthemed` | **Antigravity: Export Document to Standalone HTML (Unthemed)** | Export a 100% self-contained interactive `.html` file with a clean light theme |
+| `agyMarkdown.editSource` | **Antigravity: Switch to Raw Source Editor** | Toggle the side-by-side raw source editor |
 | `agyMarkdown.toggleSyncScroll` | **Antigravity: Toggle Synchronized Scrolling (Raw ↔ Preview)** | Enable or disable bidirectional scroll sync |
 | `agyMarkdown.openNativeArtifactViewer` | **Antigravity: Open in Native Artifact Viewer** | Open a brain artifact in Antigravity's native viewer |
 | `agyMarkdown.syncMpeTheme` | **Antigravity: Sync Style with Markdown Preview Enhanced** | Sync Antigravity styles with `~/.local/state/crossnote/style.less` |

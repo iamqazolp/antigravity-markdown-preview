@@ -1,8 +1,8 @@
 {
   "name": "agy-markdown-review",
-  "displayName": "Antigravity Markdown Review",
-  "description": "Applies Google Antigravity's Artifact Viewer style (callouts, tables, code blocks, carousels, and file links) to every Markdown review and preview in VS Code.",
-  "version": "1.2.0",
+  "displayName": "Antigravity Document Preview",
+  "description": "Google Antigravity's Artifact & Document Preview for Markdown (.md, .mdx, .qmd, .rmd), HTML, SVG, Mermaid, CSV/TSV, and JSONL transcripts — featuring theme-adaptive syntax highlighting, interactive carousels, pan-zoom diagrams, full-bleed PDF/HTML export, and 60fps scroll sync.",
+  "version": "1.3.0",
   "publisher": "iamqazolp",
   "license": "MIT",
   "icon": "media/icon.png",
@@ -25,16 +25,20 @@
   "categories": [
     "Other",
     "Themes",
-    "Programming Languages"
+    "Programming Languages",
+    "Visualization"
   ],
   "keywords": [
     "antigravity",
+    "document-preview",
     "markdown",
-    "preview",
-    "review",
-    "artifact",
-    "syntax-highlighting",
+    "html",
+    "svg",
     "mermaid",
+    "csv",
+    "jsonl",
+    "mdx",
+    "quarto",
     "katex",
     "callout",
     "carousel"
@@ -47,6 +51,12 @@
   "activationEvents": [
     "onStartupFinished",
     "onLanguage:markdown",
+    "onLanguage:mdx",
+    "onLanguage:html",
+    "onLanguage:xml",
+    "onLanguage:csv",
+    "onLanguage:json",
+    "onLanguage:jsonl",
     "onCustomEditor:antigravity.markdownReview"
   ],
   "main": "./extension.js",
@@ -61,7 +71,7 @@
     "customEditors": [
       {
         "viewType": "antigravity.markdownReview",
-        "displayName": "Antigravity Markdown Review",
+        "displayName": "Antigravity Document Preview",
         "priority": "default",
         "selector": [
           {
@@ -72,6 +82,81 @@
           },
           {
             "filenamePattern": "*.markdown"
+          },
+          {
+            "filenamePattern": "**/*.markdown"
+          },
+          {
+            "filenamePattern": "*.mdx"
+          },
+          {
+            "filenamePattern": "**/*.mdx"
+          },
+          {
+            "filenamePattern": "*.qmd"
+          },
+          {
+            "filenamePattern": "**/*.qmd"
+          },
+          {
+            "filenamePattern": "*.rmd"
+          },
+          {
+            "filenamePattern": "**/*.rmd"
+          },
+          {
+            "filenamePattern": "*.html"
+          },
+          {
+            "filenamePattern": "**/*.html"
+          },
+          {
+            "filenamePattern": "*.htm"
+          },
+          {
+            "filenamePattern": "**/*.htm"
+          },
+          {
+            "filenamePattern": "*.svg"
+          },
+          {
+            "filenamePattern": "**/*.svg"
+          },
+          {
+            "filenamePattern": "*.mmd"
+          },
+          {
+            "filenamePattern": "**/*.mmd"
+          },
+          {
+            "filenamePattern": "*.mermaid"
+          },
+          {
+            "filenamePattern": "**/*.mermaid"
+          },
+          {
+            "filenamePattern": "*.csv"
+          },
+          {
+            "filenamePattern": "**/*.csv"
+          },
+          {
+            "filenamePattern": "*.tsv"
+          },
+          {
+            "filenamePattern": "**/*.tsv"
+          },
+          {
+            "filenamePattern": "*.jsonl"
+          },
+          {
+            "filenamePattern": "**/*.jsonl"
+          },
+          {
+            "filenamePattern": "*.ndjson"
+          },
+          {
+            "filenamePattern": "**/*.ndjson"
           }
         ]
       }
@@ -79,17 +164,17 @@
     "commands": [
       {
         "command": "agyMarkdown.openReview",
-        "title": "Antigravity: Open Markdown Review",
+        "title": "Antigravity: Open Document Preview",
         "icon": "$(sparkle)"
       },
       {
         "command": "agyMarkdown.openReviewBeside",
-        "title": "Antigravity: Open Markdown Review to the Side",
+        "title": "Antigravity: Open Document Preview to the Side",
         "icon": "$(open-preview)"
       },
       {
         "command": "agyMarkdown.editSource",
-        "title": "Antigravity: Edit Raw Markdown",
+        "title": "Antigravity: Edit Raw Source",
         "icon": "$(edit)"
       },
       {
@@ -107,29 +192,29 @@
       },
       {
         "command": "agyMarkdown.exportPdf",
-        "title": "Antigravity: Export Markdown to PDF…",
+        "title": "Antigravity: Export Document to PDF…",
         "icon": "$(file-pdf)"
       },
       {
         "command": "agyMarkdown.exportPdfThemed",
-        "title": "Antigravity: Export Markdown to PDF (Themed)"
+        "title": "Antigravity: Export Document to PDF (Themed)"
       },
       {
         "command": "agyMarkdown.exportPdfUnthemed",
-        "title": "Antigravity: Export Markdown to PDF (Unthemed)"
+        "title": "Antigravity: Export Document to PDF (Unthemed)"
       },
       {
         "command": "agyMarkdown.exportHtml",
-        "title": "Antigravity: Export Markdown to Standalone HTML…",
+        "title": "Antigravity: Export Document to Standalone HTML…",
         "icon": "$(globe)"
       },
       {
         "command": "agyMarkdown.exportHtmlThemed",
-        "title": "Antigravity: Export Markdown to Standalone HTML (Themed)"
+        "title": "Antigravity: Export Document to Standalone HTML (Themed)"
       },
       {
         "command": "agyMarkdown.exportHtmlUnthemed",
-        "title": "Antigravity: Export Markdown to Standalone HTML (Unthemed)"
+        "title": "Antigravity: Export Document to Standalone HTML (Unthemed)"
       },
       {
         "command": "agyMarkdown.openGitHub",
@@ -151,12 +236,12 @@
       "editor/title": [
         {
           "command": "agyMarkdown.openReview",
-          "when": "editorLangId == 'markdown' && activeCustomEditorId != 'antigravity.markdownReview'",
+          "when": "(editorLangId == 'markdown' || editorLangId == 'mdx' || editorLangId == 'quarto' || editorLangId == 'rmd' || editorLangId == 'html' || resourceExtname =~ /\\.(md|markdown|mdx|qmd|rmd|html|htm|svg|mmd|mermaid|csv|tsv|jsonl|ndjson)$/i) && activeCustomEditorId != 'antigravity.markdownReview'",
           "group": "navigation@1"
         },
         {
           "command": "agyMarkdown.openReviewBeside",
-          "when": "editorLangId == 'markdown' && activeCustomEditorId != 'antigravity.markdownReview'",
+          "when": "(editorLangId == 'markdown' || editorLangId == 'mdx' || editorLangId == 'quarto' || editorLangId == 'rmd' || editorLangId == 'html' || resourceExtname =~ /\\.(md|markdown|mdx|qmd|rmd|html|htm|svg|mmd|mermaid|csv|tsv|jsonl|ndjson)$/i) && activeCustomEditorId != 'antigravity.markdownReview'",
           "group": "navigation@2"
         },
         {
@@ -168,18 +253,23 @@
       "explorer/context": [
         {
           "command": "agyMarkdown.openReview",
-          "when": "resourceExtname == '.md' || resourceExtname == '.markdown'",
+          "when": "resourceExtname =~ /\\.(md|markdown|mdx|qmd|rmd|html|htm|svg|mmd|mermaid|csv|tsv|jsonl|ndjson)$/i",
           "group": "navigation@1"
+        },
+        {
+          "command": "agyMarkdown.openReviewBeside",
+          "when": "resourceExtname =~ /\\.(md|markdown|mdx|qmd|rmd|html|htm|svg|mmd|mermaid|csv|tsv|jsonl|ndjson)$/i",
+          "group": "navigation@2"
         }
       ]
     },
     "configuration": {
-      "title": "Antigravity Markdown Review",
+      "title": "Antigravity Document Preview",
       "properties": {
         "agyMarkdown.syncScroll": {
           "type": "boolean",
           "default": true,
-          "description": "Synchronize scrolling between the raw Markdown editor and Antigravity Markdown Review in split edit mode."
+          "description": "Synchronize scrolling between the raw source editor and Antigravity Document Preview in split edit mode."
         },
         "agyMarkdown.codeLineNumbers": {
           "type": "boolean",
@@ -189,7 +279,7 @@
         "agyMarkdown.useThemePalette": {
           "type": "boolean",
           "default": true,
-          "description": "Dynamically integrate the active VS Code color theme's workbench surfaces (sidebar/cell tints) and editor syntax token colors into Markdown Review and previews."
+          "description": "Dynamically integrate the active VS Code color theme's workbench surfaces (sidebar/cell tints) and editor syntax token colors into Document Preview."
         },
         "agyMarkdown.syncMarkdownPreviewEnhanced": {
           "type": "boolean",
