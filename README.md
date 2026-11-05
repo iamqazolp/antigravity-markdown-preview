@@ -1,6 +1,12 @@
 # Antigravity Markdown Review
 
-**Google Antigravity's native Artifact Viewer styling, theme-adaptive syntax highlighting, interactive carousels, and 60fps bidirectional scroll sync for VS Code, Cursor, Windsurf, and Antigravity IDE.**
+[![VS Code Marketplace Version](https://img.shields.io/visual-studio-marketplace/v/iamqazolp.agy-markdown-review?label=VS%20Code%20Marketplace&logo=visual-studio-code&color=22c55e)](https://marketplace.visualstudio.com/items?itemName=iamqazolp.agy-markdown-review)
+[![VS Code Marketplace Downloads](https://img.shields.io/visual-studio-marketplace/d/iamqazolp.agy-markdown-review?label=Downloads&color=38bdf8)](https://marketplace.visualstudio.com/items?itemName=iamqazolp.agy-markdown-review)
+[![GitHub Repository](https://img.shields.io/badge/GitHub-iamqazolp%2Fantigravity--markdown--preview-181717?logo=github)](https://github.com/iamqazolp/antigravity-markdown-preview)
+[![Report Issue](https://img.shields.io/badge/Issues-Report%20Bug%20%2F%20Feature-f59e0b?logo=github)](https://github.com/iamqazolp/antigravity-markdown-preview/issues)
+[![License: MIT](https://img.shields.io/badge/License-MIT-a855f7.svg)](https://github.com/iamqazolp/antigravity-markdown-preview/blob/main/LICENSE)
+
+**Google Antigravity's native Artifact Viewer styling, theme-adaptive syntax highlighting, full-bleed PDF export, interactive carousels, and 60fps bidirectional scroll sync for VS Code, Cursor, Windsurf, and Antigravity IDE.**
 
 ![Antigravity Markdown Review Showcase](https://raw.githubusercontent.com/iamqazolp/antigravity-markdown-preview/main/media/screenshots/demo-showcase.gif)
 
@@ -80,6 +86,9 @@ class FlashAttentionBlock(nn.Module):
 | `agyMarkdown.toggleSyncScroll` | **Antigravity: Toggle Synchronized Scrolling (Raw ↔ Preview)** | Enable or disable bidirectional scroll sync |
 | `agyMarkdown.openNativeArtifactViewer` | **Antigravity: Open in Native Artifact Viewer** | Open a brain artifact in Antigravity's native viewer |
 | `agyMarkdown.syncMpeTheme` | **Antigravity: Sync Style with Markdown Preview Enhanced** | Sync Antigravity styles with `~/.local/state/crossnote/style.less` |
+| `agyMarkdown.openGitHub` | **Antigravity: Open GitHub Repository** | Open the GitHub repository in your browser |
+| `agyMarkdown.reportIssue` | **Antigravity: Report Issue on GitHub (with Diagnostics)** | Open a pre-filled GitHub issue with extension, IDE, OS, and active theme diagnostics |
+| `agyMarkdown.showTelemetryStats` | **Antigravity: Show Extension Telemetry & Marketplace Stats** | Inspect live VS Code Marketplace metrics (`install` vs `downloadCount`) and author telemetry exclusion status |
 
 ---
 
@@ -91,6 +100,7 @@ class FlashAttentionBlock(nn.Module):
 | `agyMarkdown.codeLineNumbers` | `boolean` | `false` | Display line numbers inside fenced code blocks by default (can also be enabled per block with `showLineNumbers`). |
 | `agyMarkdown.useThemePalette` | `boolean` | `true` | Dynamically extract syntax highlighting colors (`semanticTokenColors` / `tokenColors`) and surface tints from the active VS Code color theme. |
 | `agyMarkdown.syncMarkdownPreviewEnhanced` | `boolean` | `true` | Automatically apply the Antigravity style and parser extensions to Markdown Preview Enhanced (Crossnote). |
+| `agyMarkdown.telemetry` | `boolean` | `true` | Send anonymous feature usage telemetry (respects VS Code's global `telemetry.telemetryLevel` and automatically excludes the extension author's development machine). |
 
 ---
 

@@ -2,6 +2,17 @@
 
 All notable changes to the **Antigravity Markdown Review** (`agy-markdown-review`) extension will be documented in this file.
 
+## [1.1.1] - 2026-11-05
+
+### Added
+- **GitHub Links & 1-Click Diagnostic Issue Reporter (`agyMarkdown.openGitHub`, `agyMarkdown.reportIssue`)**:
+  - Added **GitHub / Report Issue ↗** to the review toolbar `⋮` menu and Command Palette.
+  - Pre-fills GitHub bug reports and feature requests with extension version, IDE name/version, OS architecture, and active VS Code color theme.
+  - Added live VS Code Marketplace, Downloads, GitHub Repo, and Issue badges to `README.md`.
+- **Privacy-First Telemetry with Automatic Author Exclusion & Marketplace Inspector (`agyMarkdown.showTelemetryStats`, `agyMarkdown.telemetry`)**:
+  - Uses VS Code's native `vscode.env.createTelemetryLogger` (respecting `telemetry.telemetryLevel` and `agyMarkdown.telemetry`) while automatically detecting and excluding the author's development machine (`iamqazolp` / Extension Development Host) so zero author events are ever recorded.
+  - Added **Antigravity: Show Extension Telemetry & Marketplace Stats** to query the live VS Code Marketplace Gallery API and break down real **In-App Installs (`install`)** vs **Direct VSIX Mirror/Scanner Downloads (`downloadCount`)** vs **Extension Updates (`updateCount`)**.
+
 ## [1.1.0] - 2026-11-05
 
 ### Added

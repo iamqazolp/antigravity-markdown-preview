@@ -2,7 +2,7 @@
   "name": "agy-markdown-review",
   "displayName": "Antigravity Markdown Review",
   "description": "Applies Google Antigravity's Artifact Viewer style (callouts, tables, code blocks, carousels, and file links) to every Markdown review and preview in VS Code.",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "publisher": "iamqazolp",
   "license": "MIT",
   "icon": "media/icon.png",
@@ -116,6 +116,21 @@
       {
         "command": "agyMarkdown.exportPdfUnthemed",
         "title": "Antigravity: Export Markdown to PDF (Unthemed)"
+      },
+      {
+        "command": "agyMarkdown.openGitHub",
+        "title": "Antigravity: Open GitHub Repository",
+        "icon": "$(github)"
+      },
+      {
+        "command": "agyMarkdown.reportIssue",
+        "title": "Antigravity: Report Issue on GitHub (with Diagnostics)",
+        "icon": "$(bug)"
+      },
+      {
+        "command": "agyMarkdown.showTelemetryStats",
+        "title": "Antigravity: Show Extension Telemetry & Marketplace Stats",
+        "icon": "$(graph)"
       }
     ],
     "menus": {
@@ -166,6 +181,11 @@
           "type": "boolean",
           "default": true,
           "description": "Automatically apply the Antigravity style and parser extensions to Markdown Preview Enhanced (Crossnote)."
+        },
+        "agyMarkdown.telemetry": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable anonymous extension usage and error telemetry (automatically disabled for the extension author and when VS Code telemetry is off)."
         }
       }
     }

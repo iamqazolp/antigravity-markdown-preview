@@ -4,9 +4,133 @@ const vscode = require("vscode");
 const fs = require("fs");
 const path = require("path");
 const os = require("os");
+const crypto = require("crypto");
+const https = require("https");
 const { execFile } = require("child_process");
 
+const GITHUB_REPO_URL = "https://github.com/iamqazolp/antigravity-markdown-preview";
+const MARKETPLACE_ITEM_URL =
+  "https://marketplace.visualstudio.com/items?itemName=iamqazolp.agy-markdown-review";
+const AUTHOR_USERNAMES = new Set(["iamqazolp"]);
+
 const activeReviewWebviewsByPath = new Map();
+let telemetryLogger = null;
+let telemetryOutputChannel = null;
+let isExcludedAuthorEnv = false;
+
+function detectIsAuthorEnvironment(context) {
+  try {
+    if (context && context.extensionMode === vscode.ExtensionMode.Development) {
+      return true;
+    }
+    const username = String((os.userInfo() && os.userInfo().username) || "")
+      .trim()
+      .toLowerCase();
+    if (AUTHOR_USERNAMES.has(username)) {
+      return true;
+    }
+    const home = os.homedir();
+    if (home.toLowerCase().includes("iamqazolp")) {
+      return true;
+    }
+    if (
+      fs.existsSync(
+        path.join(home, "Documents", "Projects", "antigravity-markdown-preview", "install.py")
+      )
+    ) {
+      return true;
+    }
+  } catch (_) {}
+  return false;
+}
+
+function getAnonymousDistinctId() {
+  const raw = String((vscode.env && vscode.env.machineId) || "anonymous");
+  return crypto.createHash("sha256").update(`agy-md:${raw}`).digest("hex").slice(0, 24);
+}
+
+function initTelemetry(context) {
+  isExcludedAuthorEnv = detectIsAuthorEnvironment(context);
+  telemetryOutputChannel = vscode.window.createOutputChannel("Antigravity Markdown Review");
+  context.subscriptions.push(telemetryOutputChannel);
+
+  const extVersion =
+    (context &&
+      context.extension &&
+      context.extension.packageJSON &&
+      context.extension.packageJSON.version) ||
+    "1.1.1";
+
+  const sender = {
+    sendEventData(eventName, data) {
+      const enabledByCfg = vscode.workspace
+        .getConfiguration("agyMarkdown")
+        .get("telemetry", true);
+      if (!enabledByCfg || !vscode.env.isTelemetryEnabled) {
+        return;
+      }
+      const payload = Object.assign(
+        {
+          distinct_id: getAnonymousDistinctId(),
+          appName: vscode.env.appName || "VSCode",
+          vscodeVersion: vscode.version,
+          platform: process.platform,
+          arch: process.arch,
+          extVersion,
+          colorTheme:
+            vscode.workspace.getConfiguration("workbench").get("colorTheme") || "unknown",
+          timestamp: new Date().toISOString()
+        },
+        data || {}
+      );
+      if (isExcludedAuthorEnv) {
+        if (telemetryOutputChannel) {
+          telemetryOutputChannel.appendLine(
+            `[Telemetry:AuthorExcluded] ${eventName} ${JSON.stringify(payload)}`
+          );
+        }
+        return;
+      }
+      if (telemetryOutputChannel) {
+        telemetryOutputChannel.appendLine(
+          `[Telemetry:Event] ${eventName} ${JSON.stringify(payload)}`
+        );
+      }
+    },
+    sendErrorData(error, data) {
+      if (isExcludedAuthorEnv) {
+        if (telemetryOutputChannel) {
+          telemetryOutputChannel.appendLine(
+            `[Telemetry:AuthorExcludedError] ${error && error.message ? error.message : error}`
+          );
+        }
+        return;
+      }
+      if (telemetryOutputChannel) {
+        telemetryOutputChannel.appendLine(
+          `[Telemetry:Error] ${error && error.message ? error.message : error} ${JSON.stringify(
+            data || {}
+          )}`
+        );
+      }
+    }
+  };
+
+  if (typeof vscode.env.createTelemetryLogger === "function") {
+    telemetryLogger = vscode.env.createTelemetryLogger(sender, {
+      ignoreBuiltInCommonProperties: false
+    });
+    context.subscriptions.push(telemetryLogger);
+  }
+}
+
+function trackEvent(eventName, properties = {}) {
+  try {
+    if (telemetryLogger && typeof telemetryLogger.logUsage === "function") {
+      telemetryLogger.logUsage(eventName, properties);
+    }
+  } catch (_) {}
+}
 
 const BRAIN_UUID_RE = /\/brain\/([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})\//;
 
@@ -1178,6 +1302,7 @@ class AntigravityMarkdownReviewProvider {
     };
 
     await renderToWebview(true);
+    trackEvent("review.open", { isBrainArtifact: info.isBrainArtifact });
 
     const disposables = [
       {
@@ -1349,6 +1474,7 @@ class AntigravityMarkdownReviewProvider {
             }
           }
         } else if (msg.type === "toggleSplitEdit") {
+          trackEvent("review.splitEdit");
           const rawTabs = getOpenRawEditorTabs(info);
           const visibleRawEditors = findMatchingVisibleEditors(info);
           if (rawTabs.length > 0 || visibleRawEditors.length > 0) {
@@ -1420,8 +1546,12 @@ class AntigravityMarkdownReviewProvider {
           }
           broadcastSplitState();
         } else if (msg.type === "openNativeArtifact") {
+          trackEvent("review.openNativeArtifact");
           await openInNativeArtifactViewer(info);
+        } else if (msg.type === "openGitHubMenu") {
+          await promptGitHubOrReportIssue(info);
         } else if (msg.type === "exportPdf") {
+          trackEvent("review.exportPdf", { mode: msg.mode || "ask" });
           await exportMarkdownToPdf({
             info,
             extensionPath: this.context.extensionPath,
@@ -2575,6 +2705,7 @@ function buildWebviewHtml({
           <button type="button" class="agy-menu-item" id="btn-copy"><span>Copy Raw Markdown</span></button>
           <button type="button" class="agy-menu-item" id="btn-edit"><span>Switch to Raw Editor</span></button>
           ${nativeMenuItem}
+          <button type="button" class="agy-menu-item" id="btn-github" title="Open GitHub repository or report an issue"><span>GitHub / Report Issue ↗</span></button>
         </div>
       </div>
     </div>
@@ -2591,6 +2722,7 @@ function buildWebviewHtml({
       const btnSplit = document.getElementById("btn-split");
       const btnCopy = document.getElementById("btn-copy");
       const btnNative = document.getElementById("btn-native");
+      const btnGitHub = document.getElementById("btn-github");
       const btnExportPdfThemed = document.getElementById("btn-export-pdf-themed");
       const btnExportPdfUnthemed = document.getElementById("btn-export-pdf-unthemed");
       const btnSync = document.getElementById("btn-sync");
@@ -2998,6 +3130,12 @@ function buildWebviewHtml({
         btnNative.addEventListener("click", () => {
           closeMoreMenu();
           vscode.postMessage({ type: "openNativeArtifact" });
+        });
+      }
+      if (btnGitHub) {
+        btnGitHub.addEventListener("click", () => {
+          closeMoreMenu();
+          vscode.postMessage({ type: "openGitHubMenu" });
         });
       }
 
@@ -3454,6 +3592,7 @@ function extendMarkdownItWithAntigravity(md) {
 }
 
 async function triggerExportPdfCommand(uri, mode, extensionPath) {
+  trackEvent("command.exportPdf", { mode });
   let targetUri = uri instanceof vscode.Uri ? uri : null;
   if (!targetUri && vscode.window.tabGroups && vscode.window.tabGroups.activeTabGroup) {
     const activeTab = vscode.window.tabGroups.activeTabGroup.activeTab;
@@ -3485,7 +3624,258 @@ async function triggerExportPdfCommand(uri, mode, extensionPath) {
   });
 }
 
+async function openGitHubRepository() {
+  trackEvent("github.openRepo");
+  await vscode.env.openExternal(vscode.Uri.parse(GITHUB_REPO_URL));
+}
+
+async function openGitHubReportIssue(info) {
+  trackEvent("github.reportIssue");
+  const activeThemeName = vscode.workspace
+    .getConfiguration("workbench")
+    .get("colorTheme", "Default");
+  const title = encodeURIComponent("[Bug / Feature]: ");
+  const bodyLines = [
+    "### Describe the issue or feature request",
+    "",
+    "",
+    "### Steps to reproduce (if applicable)",
+    "1. ",
+    "2. ",
+    "",
+    "### Diagnostics",
+    `- **Extension**: \`${EXTENSION_ID}\` v${EXTENSION_VERSION}`,
+    `- **IDE**: ${vscode.env.appName} (${vscode.version})`,
+    `- **OS**: ${process.platform} (${os.release()}, ${process.arch})`,
+    `- **Active Color Theme**: \`${activeThemeName}\``,
+    info && info.isBrainArtifact ? `- **Document Type**: Antigravity Brain Artifact` : ""
+  ].filter(Boolean);
+  const body = encodeURIComponent(bodyLines.join("\n"));
+  const issueUrl = `${GITHUB_ISSUES_URL}/new?title=${title}&body=${body}`;
+  await vscode.env.openExternal(vscode.Uri.parse(issueUrl));
+}
+
+async function promptGitHubOrReportIssue(info) {
+  const pick = await vscode.window.showQuickPick(
+    [
+      {
+        label: "$(github) Open GitHub Repository",
+        description: "github.com/iamqazolp/antigravity-markdown-preview",
+        detail: "Star the project, browse source code, or read documentation",
+        action: "repo"
+      },
+      {
+        label: "$(bug) Report Issue / Request Feature (with Diagnostics)",
+        description: "Opens a pre-filled GitHub issue with IDE, OS & theme info",
+        detail: `Extension v${EXTENSION_VERSION} · ${vscode.env.appName} ${vscode.version}`,
+        action: "issue"
+      },
+      {
+        label: "$(pulse) Show Extension Telemetry & Marketplace Stats",
+        description: "Inspect live VS Code Marketplace metrics & author exclusion status",
+        detail: isAuthorEnvironment
+          ? "Author machine detected — your local activity is EXCLUDED from telemetry"
+          : "View live install vs automated .vsix download counts",
+        action: "stats"
+      }
+    ],
+    {
+      title: "Antigravity Markdown Review — GitHub & Diagnostics",
+      placeHolder: "Choose an action"
+    }
+  );
+  if (!pick) return;
+  if (pick.action === "repo") {
+    await openGitHubRepository();
+  } else if (pick.action === "issue") {
+    await openGitHubReportIssue(info);
+  } else if (pick.action === "stats") {
+    await showTelemetryAndMarketplaceStats();
+  }
+}
+
+function fetchMarketplaceStats() {
+  return new Promise((resolve) => {
+    const payload = JSON.stringify({
+      filters: [
+        {
+          criteria: [{ filterType: 7, value: EXTENSION_ID }]
+        }
+      ],
+      flags: 914
+    });
+    const req = https.request(
+      {
+        hostname: "marketplace.visualstudio.com",
+        path: "/_apis/public/gallery/extensionquery",
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json;api-version=3.0-preview.1",
+          "Content-Length": Buffer.byteLength(payload)
+        },
+        timeout: 5000
+      },
+      (res) => {
+        let raw = "";
+        res.on("data", (chunk) => {
+          raw += chunk;
+        });
+        res.on("end", () => {
+          try {
+            const parsed = JSON.parse(raw);
+            const ext =
+              parsed &&
+              parsed.results &&
+              parsed.results[0] &&
+              parsed.results[0].extensions &&
+              parsed.results[0].extensions[0];
+            if (!ext) {
+              resolve(null);
+              return;
+            }
+            const statsMap = {};
+            for (const s of ext.statistics || []) {
+              statsMap[s.statisticName] = s.value;
+            }
+            const latestVer =
+              ext.versions && ext.versions[0] ? ext.versions[0].version : EXTENSION_VERSION;
+            resolve({
+              version: latestVer,
+              install: statsMap.install || 0,
+              downloadCount: statsMap.downloadCount || 0,
+              updateCount: statsMap.updateCount || 0,
+              averagerating: statsMap.averagerating || 0,
+              ratingcount: statsMap.ratingcount || 0
+            });
+          } catch (_) {
+            resolve(null);
+          }
+        });
+      }
+    );
+    req.on("error", () => resolve(null));
+    req.on("timeout", () => {
+      req.destroy();
+      resolve(null);
+    });
+    req.write(payload);
+    req.end();
+  });
+}
+
+function fetchGitHubRepoStats() {
+  return new Promise((resolve) => {
+    const req = https.request(
+      {
+        hostname: "api.github.com",
+        path: "/repos/iamqazolp/antigravity-markdown-preview",
+        method: "GET",
+        headers: {
+          "User-Agent": "agy-markdown-review-vsix",
+          Accept: "application/vnd.github+json"
+        },
+        timeout: 5000
+      },
+      (res) => {
+        let raw = "";
+        res.on("data", (chunk) => {
+          raw += chunk;
+        });
+        res.on("end", () => {
+          try {
+            const parsed = JSON.parse(raw);
+            if (!parsed || typeof parsed.stargazers_count !== "number") {
+              resolve(null);
+              return;
+            }
+            resolve({
+              stars: parsed.stargazers_count || 0,
+              forks: parsed.forks_count || 0,
+              openIssues: parsed.open_issues_count || 0
+            });
+          } catch (_) {
+            resolve(null);
+          }
+        });
+      }
+    );
+    req.on("error", () => resolve(null));
+    req.on("timeout", () => {
+      req.destroy();
+      resolve(null);
+    });
+    req.end();
+  });
+}
+
+async function showTelemetryAndMarketplaceStats() {
+  const [mkt, gh] = await Promise.all([fetchMarketplaceStats(), fetchGitHubRepoStats()]);
+  const cfgTelemetry = vscode.workspace
+    .getConfiguration("agyMarkdown")
+    .get("telemetry", true);
+
+  const authorStatus = isAuthorEnvironment
+    ? "EXCLUDED (Author machine detected — 0 events sent from your machine)"
+    : cfgTelemetry && vscode.env.isTelemetryEnabled
+    ? "ENABLED (Anonymous usage events active)"
+    : "DISABLED (Opted out via settings)";
+
+  const totalAcquisitions = mkt ? (mkt.install || 0) + (mkt.downloadCount || 0) : null;
+  const lines = [
+    `# Antigravity Markdown Review — Telemetry & Marketplace Report`,
+    ``,
+    `- **Extension**: \`${EXTENSION_ID}\` (local \`v${EXTENSION_VERSION}\`${mkt ? `, Marketplace \`v${mkt.version}\`` : ""})`,
+    `- **Your Telemetry Status**: **${authorStatus}**`,
+    `- **Repository**: ${GITHUB_REPO_URL}`,
+    gh
+      ? `- **GitHub Stats**: ⭐ **${gh.stars}** stars · 🍴 **${gh.forks}** forks · 🐛 **${gh.openIssues}** open issues`
+      : `- **GitHub Stats**: *(offline or rate-limited)*`,
+    ``,
+    `## 📊 VS Code Marketplace Breakdown`,
+    mkt
+      ? [
+          `| Metric | Count | What It Actually Measures |`,
+          `| :--- | :---: | :--- |`,
+          `| **In-App Installs (\`install\`)** | **${mkt.install}** | Users clicking **Install** inside VS Code / Cursor / Antigravity Extensions view |`,
+          `| **Direct VSIX Downloads (\`downloadCount\`)** | **${mkt.downloadCount}** | Direct \`.vsix\` HTTP downloads (automated VSIX mirrors, security scanners like Socket/Snyk, & web downloads) |`,
+          `| **Extension Updates (\`updateCount\`)** | **${mkt.updateCount}** | Automatic or manual version upgrades from an earlier release |`,
+          `| **Total Acquisitions (\`install + downloadCount\`)** | **${totalAcquisitions}** | Combined headline number shown on the VS Code Publisher Dashboard |`
+        ].join("\n")
+      : `*(Could not reach marketplace.visualstudio.com)*`,
+    ``,
+    `> [!NOTE]`,
+    `> **Why does the Publisher Dashboard show ~30–40 Downloads/Acquisitions right after publishing?**`,
+    `> Every time you publish a new version (\`1.0.0\`, \`1.0.1\`, \`1.0.2\`, \`1.1.0\`), public VSIX mirror registries, open-source archivers, and automated extension security scanners download the \`.vsix\` package (~8–10 automated pulls per version) to index and scan it. Microsoft's Publisher Dashboard adds \`install + downloadCount\` together into "Acquisitions", whereas **In-App Installs (\`install\`)** tracks real human installations from inside the IDE.`
+  ];
+
+  const channel = vscode.window.createOutputChannel("Antigravity Telemetry & Stats", "markdown");
+  channel.clear();
+  channel.appendLine(lines.join("\n"));
+  channel.show(true);
+
+  const summaryMsg = mkt
+    ? `Marketplace v${mkt.version}: ${mkt.install} In-App Installs · ${mkt.downloadCount} VSIX Mirrors/Downloads (${totalAcquisitions} Total) · Author Telemetry: ${
+        isAuthorEnvironment ? "EXCLUDED" : "Active"
+      }`
+    : `Author Telemetry: ${isAuthorEnvironment ? "EXCLUDED (Author machine)" : "Active"}`;
+
+  const action = await vscode.window.showInformationMessage(
+    summaryMsg,
+    "Open GitHub Repo",
+    "Open Marketplace Page"
+  );
+  if (action === "Open GitHub Repo") {
+    await openGitHubRepository();
+  } else if (action === "Open Marketplace Page") {
+    await vscode.env.openExternal(vscode.Uri.parse(MARKETPLACE_URL));
+  }
+}
+
 function activate(context) {
+  initTelemetry(context);
+  trackEvent("extension.activate");
+
   const provider = new AntigravityMarkdownReviewProvider(context);
 
   if (vscode.window.activeTextEditor) {
@@ -3601,6 +3991,22 @@ function activate(context) {
     }),
     vscode.commands.registerCommand("agyMarkdown.exportPdfUnthemed", async (uri) => {
       await triggerExportPdfCommand(uri, "unthemed", context.extensionPath);
+    }),
+    vscode.commands.registerCommand("agyMarkdown.openGitHub", async () => {
+      await openGitHubRepository();
+    }),
+    vscode.commands.registerCommand("agyMarkdown.reportIssue", async (uri) => {
+      const targetUri =
+        uri instanceof vscode.Uri
+          ? uri
+          : vscode.window.activeTextEditor
+          ? vscode.window.activeTextEditor.document.uri
+          : null;
+      const info = targetUri ? resolveRealFileInfo(targetUri) : null;
+      await openGitHubReportIssue(info);
+    }),
+    vscode.commands.registerCommand("agyMarkdown.showTelemetryStats", async () => {
+      await showTelemetryAndMarketplaceStats();
     })
   );
 
