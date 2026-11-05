@@ -56,7 +56,13 @@ class FlashAttentionBlock(nn.Module):
 
 - **GitHub-Style Callout Alerts**: Native rendering and SVG icons for `[!NOTE]`, `[!TIP]`, `[!IMPORTANT]`, `[!WARNING]`, and `[!CAUTION]`.
 - **Interactive Carousels**: Multi-slide `` ````carousel `` blocks separated by `<!-- slide -->` HTML comments with keyboard and button navigation, nesting support for code blocks, tables, alerts, and images.
-- **Offline Mermaid & KaTeX**: Bundled `mermaid.min.js` diagram rendering and `katex.min.css` math typesetting (`$...$` and `$$...$$`).
+- **Offline Mermaid & KaTeX**: Bundled `mermaid.min.js` diagram rendering (with hover **Zoom `−`/`+`**, **`Copy SVG`**, and **`⛶ Expand`** fullscreen pan/zoom Lightbox) and `katex.min.css` math typesetting (`$...$` and `$$...$$`).
+- **Floating Document Outline (Table of Contents)**: Click **Outline** in the review toolbar to open a live-tracking Table of Contents that highlights the active section as you scroll and jumps smoothly on click.
+- **Interactive Task Checkboxes (`- [ ]` ↔ `- [x]`)**: Click task checkboxes directly in the rendered Review canvas to toggle `- [ ]` / `- [x]` in the underlying `.md` file on disk (preserving VS Code Undo history).
+- **1-Click Table Export & Selection "Cite to Agent"**:
+  - Hover any table to copy it as **GitHub Flavored Markdown (`Copy MD`)** or **CSV (`Copy CSV`)**.
+  - Select any text in the preview to reveal a floating **`📎 Cite #Lstart-Lend`** / **`❝ Cite + Quote`** pill that copies a ready-to-paste `[file.md#L12-L24](file:///abs/path/file.md#L12-L24)` citation straight into your AI agent prompt.
+- **Full-Bleed PDF & Standalone Interactive HTML Export**: Export any Markdown file as a **Themed** (active VS Code theme palette) or **Unthemed** (clean white) vector **PDF** or single-file portable **`.html`** document (with embedded base64 images, interactive carousels, Mermaid zoom lightbox, and Outline drawer).
 - **Workspace File & Session Links**: Clickable `file:///absolute/path/to/file.py#L10-L25` links that jump directly to the exact line range in your workspace, plus `conversation://` badge pills with 1-click UUID copy.
 
 ---
@@ -82,6 +88,9 @@ class FlashAttentionBlock(nn.Module):
 | `agyMarkdown.exportPdf` | **Antigravity: Export Markdown to PDF…** | Choose between **Themed PDF** (active VS Code theme) and **Unthemed PDF** (clean print white) |
 | `agyMarkdown.exportPdfThemed` | **Antigravity: Export Markdown to PDF (Themed)** | Export a full-bleed PDF preserving your active VS Code theme background, surfaces & syntax colors |
 | `agyMarkdown.exportPdfUnthemed` | **Antigravity: Export Markdown to PDF (Unthemed)** | Export a print-friendly PDF with a crisp white background and high-contrast light syntax palette |
+| `agyMarkdown.exportHtml` | **Antigravity: Export Markdown to Standalone HTML…** | Choose between **Themed HTML** (active VS Code theme) and **Unthemed HTML** (clean light) |
+| `agyMarkdown.exportHtmlThemed` | **Antigravity: Export Markdown to Standalone HTML (Themed)** | Export a 100% self-contained interactive `.html` file with your active VS Code theme |
+| `agyMarkdown.exportHtmlUnthemed` | **Antigravity: Export Markdown to Standalone HTML (Unthemed)** | Export a 100% self-contained interactive `.html` file with a clean light theme |
 | `agyMarkdown.editSource` | **Antigravity: Edit Raw Markdown** | Toggle the side-by-side raw Markdown source editor |
 | `agyMarkdown.toggleSyncScroll` | **Antigravity: Toggle Synchronized Scrolling (Raw ↔ Preview)** | Enable or disable bidirectional scroll sync |
 | `agyMarkdown.openNativeArtifactViewer` | **Antigravity: Open in Native Artifact Viewer** | Open a brain artifact in Antigravity's native viewer |

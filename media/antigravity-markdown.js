@@ -374,6 +374,62 @@
     });
   }
 
+  function extractTableMatrix(table) {
+    const rows = [];
+    const trList = table.querySelectorAll("tr");
+    trList.forEach((tr) => {
+      const cells = [];
+      tr.querySelectorAll("th, td").forEach((cell) => {
+        const text = (cell.textContent || "").replace(/\s+/g, " ").trim();
+        cells.push(text);
+      });
+      if (cells.length) {
+        rows.push({
+          isHeader: Boolean(tr.closest("thead") || tr.querySelector("th")),
+          cells
+        });
+      }
+    });
+    return rows;
+  }
+
+  function tableToCsv(table) {
+    const rows = extractTableMatrix(table);
+    return rows
+      .map((r) =>
+        r.cells
+          .map((c) => {
+            if (/[",\n\r]/.test(c)) {
+              return '"' + c.replace(/"/g, '""') + '"';
+            }
+            return c;
+          })
+          .join(",")
+      )
+      .join("\n");
+  }
+
+  function tableToMarkdown(table) {
+    const rows = extractTableMatrix(table);
+    if (!rows.length) return "";
+    const colCount = rows.reduce((max, r) => Math.max(max, r.cells.length), 0);
+    const fmtRow = (cells) => {
+      const padded = [];
+      for (let i = 0; i < colCount; i++) {
+        padded.push(String(cells[i] || "").replace(/\|/g, "\\|"));
+      }
+      return "| " + padded.join(" | ") + " |";
+    };
+    const out = [fmtRow(rows[0].cells)];
+    const sep = [];
+    for (let i = 0; i < colCount; i++) sep.push("---");
+    out.push("| " + sep.join(" | ") + " |");
+    for (let r = 1; r < rows.length; r++) {
+      out.push(fmtRow(rows[r].cells));
+    }
+    return out.join("\n");
+  }
+
   function transformTables(root) {
     const tables = root.querySelectorAll("table");
     tables.forEach((table) => {
@@ -383,16 +439,59 @@
       ) {
         return;
       }
-      if (
+      let wrapper =
         table.parentElement &&
         table.parentElement.classList.contains("agy-table-wrapper")
-      ) {
-        return;
+          ? table.parentElement
+          : null;
+      if (!wrapper) {
+        wrapper = document.createElement("div");
+        wrapper.className = "agy-table-wrapper";
+        table.parentNode.insertBefore(wrapper, table);
+        wrapper.appendChild(table);
       }
-      const wrapper = document.createElement("div");
-      wrapper.className = "agy-table-wrapper";
-      table.parentNode.insertBefore(wrapper, table);
-      wrapper.appendChild(table);
+      if (!wrapper.querySelector(".agy-table-actions")) {
+        const actions = document.createElement("div");
+        actions.className = "agy-table-actions";
+
+        const btnMd = document.createElement("button");
+        btnMd.type = "button";
+        btnMd.className = "agy-table-btn";
+        btnMd.textContent = "Copy MD";
+        btnMd.title = "Copy table as GitHub Flavored Markdown";
+        btnMd.addEventListener("click", (e) => {
+          e.stopPropagation();
+          copyToClipboard(tableToMarkdown(table)).then(() => {
+            btnMd.textContent = "✓ MD";
+            btnMd.classList.add("copied");
+            setTimeout(() => {
+              btnMd.textContent = "Copy MD";
+              btnMd.classList.remove("copied");
+            }, 1400);
+          });
+        });
+
+        const btnCsv = document.createElement("button");
+        btnCsv.type = "button";
+        btnCsv.className = "agy-table-btn";
+        btnCsv.textContent = "Copy CSV";
+        btnCsv.title = "Copy table as CSV";
+        btnCsv.addEventListener("click", (e) => {
+          e.stopPropagation();
+          copyToClipboard(tableToCsv(table)).then(() => {
+            btnCsv.textContent = "✓ CSV";
+            btnCsv.classList.add("copied");
+            setTimeout(() => {
+              btnCsv.textContent = "Copy CSV";
+              btnCsv.classList.remove("copied");
+            }, 1400);
+          });
+        });
+
+        actions.appendChild(btnMd);
+        actions.appendChild(btnCsv);
+        wrapper.appendChild(actions);
+      }
     });
   }
 
@@ -1284,6 +1383,7 @@
           el.setAttribute("data-mermaid-rendered", latestThemeInfo.key);
         }
       }
+      attachMermaidToolbars(scope);
       window.dispatchEvent(new CustomEvent("agy.markdown.layoutChanged"));
     });
   }
@@ -1771,6 +1871,574 @@
     actions.appendChild(menuWrap);
   }
 
+  /* --------------------------------------------------------------------------
+     v1.2.0 Interactive Enhancements:
+     1. Interactive Task Checkboxes (- [ ] <-> - [x])
+     2. Mermaid Zoom/Export Toolbar & Unified Lightbox Modal
+     3. Floating / Toggleable Table of Contents (Outline Drawer)
+     4. Selection "Cite to Agent" Floating Pill
+     -------------------------------------------------------------------------- */
+  function transformTaskLists(root) {
+    const items = root.querySelectorAll("li:not([data-agy-task-checked='1'])");
+    items.forEach((li) => {
+      li.setAttribute("data-agy-task-checked", "1");
+      if (li.closest("pre, code, .agy-toc-panel")) return;
+
+      let checkbox = li.querySelector(":scope > input[type='checkbox'], :scope > p:first-child > input[type='checkbox']");
+      if (!checkbox) {
+        const targetContainer =
+          li.firstElementChild && li.firstElementChild.tagName === "P"
+            ? li.firstElementChild
+            : li;
+        const firstNode = targetContainer.firstChild;
+        if (firstNode && firstNode.nodeType === 3) {
+          const text = firstNode.nodeValue || "";
+          const m = text.match(/^\s*\[([ xX])\](\s+)/);
+          if (m) {
+            const isChecked = m[1].toLowerCase() === "x";
+            checkbox = document.createElement("input");
+            checkbox.type = "checkbox";
+            checkbox.checked = isChecked;
+            firstNode.nodeValue = text.slice(m[0].length);
+            targetContainer.insertBefore(checkbox, firstNode);
+          }
+        }
+      }
+
+      if (!checkbox) return;
+      checkbox.disabled = false;
+      checkbox.removeAttribute("disabled");
+      checkbox.classList.add("agy-task-checkbox");
+      li.classList.add("agy-task-list-item");
+      li.classList.toggle("agy-task-checked", Boolean(checkbox.checked));
+      if (li.parentElement && (li.parentElement.tagName === "UL" || li.parentElement.tagName === "OL")) {
+        li.parentElement.classList.add("agy-task-list");
+      }
+
+      if (!checkbox.getAttribute("data-agy-bound")) {
+        checkbox.setAttribute("data-agy-bound", "1");
+        checkbox.addEventListener("change", (e) => {
+          e.stopPropagation();
+          const checked = Boolean(checkbox.checked);
+          li.classList.toggle("agy-task-checked", checked);
+          const dlAttr =
+            li.getAttribute("data-line") ||
+            (li.closest("[data-line]") && li.closest("[data-line]").getAttribute("data-line"));
+          const line = dlAttr !== null ? parseInt(dlAttr, 10) : -1;
+          const rawText = (li.textContent || "").trim().slice(0, 120);
+          window.dispatchEvent(
+            new CustomEvent("agy.markdown.toggleTask", {
+              detail: { line: Number.isNaN(line) ? -1 : line, checked, taskText: rawText }
+            })
+          );
+        });
+      }
+    });
+  }
+
+  let lightboxOverlay = null;
+  let lightboxCanvas = null;
+  let lightboxTitleEl = null;
+  let lightboxZoomBtn = null;
+  let lightboxScale = 1;
+  let lightboxTx = 0;
+  let lightboxTy = 0;
+  let lightboxDragging = false;
+  let lightboxStartX = 0;
+  let lightboxStartY = 0;
+
+  function applyLightboxTransform() {
+    if (!lightboxCanvas) return;
+    lightboxCanvas.style.transform = `translate(${Math.round(lightboxTx)}px, ${Math.round(lightboxTy)}px) scale(${lightboxScale.toFixed(3)})`;
+    if (lightboxZoomBtn) {
+      lightboxZoomBtn.textContent = `${Math.round(lightboxScale * 100)}%`;
+    }
+  }
+
+  function ensureLightboxModal() {
+    if (lightboxOverlay) return lightboxOverlay;
+    lightboxOverlay = document.createElement("div");
+    lightboxOverlay.id = "agy-lightbox";
+    lightboxOverlay.className = "agy-lightbox-overlay";
+    lightboxOverlay.hidden = true;
+    lightboxOverlay.innerHTML = `
+      <div class="agy-lightbox-topbar">
+        <span class="agy-lightbox-title" id="agy-lightbox-title">Diagram / Image Preview</span>
+        <div class="agy-lightbox-controls">
+          <button type="button" class="agy-lightbox-btn" id="agy-lb-out" title="Zoom out">−</button>
+          <button type="button" class="agy-lightbox-btn" id="agy-lb-reset" title="Reset zoom & pan">100%</button>
+          <button type="button" class="agy-lightbox-btn" id="agy-lb-in" title="Zoom in">+</button>
+          <button type="button" class="agy-lightbox-btn" id="agy-lb-close" title="Close (Esc)">✕ Close</button>
+        </div>
+      </div>
+      <div class="agy-lightbox-stage" id="agy-lightbox-stage">
+        <div class="agy-lightbox-canvas" id="agy-lightbox-canvas"></div>
+      </div>
+      <div class="agy-lightbox-hint">Scroll wheel to zoom · Click & drag to pan · Double-click to reset · Esc to close</div>
+    `;
+    document.body.appendChild(lightboxOverlay);
+
+    lightboxCanvas = lightboxOverlay.querySelector("#agy-lightbox-canvas");
+    lightboxTitleEl = lightboxOverlay.querySelector("#agy-lightbox-title");
+    lightboxZoomBtn = lightboxOverlay.querySelector("#agy-lb-reset");
+    const stage = lightboxOverlay.querySelector("#agy-lightbox-stage");
+
+    lightboxOverlay.querySelector("#agy-lb-out").addEventListener("click", () => {
+      lightboxScale = Math.max(0.25, lightboxScale / 1.25);
+      applyLightboxTransform();
+    });
+    lightboxOverlay.querySelector("#agy-lb-in").addEventListener("click", () => {
+      lightboxScale = Math.min(8, lightboxScale * 1.25);
+      applyLightboxTransform();
+    });
+    lightboxZoomBtn.addEventListener("click", () => {
+      lightboxScale = 1;
+      lightboxTx = 0;
+      lightboxTy = 0;
+      applyLightboxTransform();
+    });
+    lightboxOverlay.querySelector("#agy-lb-close").addEventListener("click", () => {
+      lightboxOverlay.hidden = true;
+    });
+
+    stage.addEventListener(
+      "wheel",
+      (e) => {
+        e.preventDefault();
+        const factor = e.deltaY < 0 ? 1.14 : 1 / 1.14;
+        lightboxScale = Math.min(8, Math.max(0.25, lightboxScale * factor));
+        applyLightboxTransform();
+      },
+      { passive: false }
+    );
+
+    stage.addEventListener("pointerdown", (e) => {
+      if (e.button !== 0) return;
+      lightboxDragging = true;
+      lightboxStartX = e.clientX - lightboxTx;
+      lightboxStartY = e.clientY - lightboxTy;
+      stage.classList.add("dragging");
+      stage.setPointerCapture(e.pointerId);
+    });
+    stage.addEventListener("pointermove", (e) => {
+      if (!lightboxDragging) return;
+      lightboxTx = e.clientX - lightboxStartX;
+      lightboxTy = e.clientY - lightboxStartY;
+      applyLightboxTransform();
+    });
+    const endDrag = () => {
+      lightboxDragging = false;
+      stage.classList.remove("dragging");
+    };
+    stage.addEventListener("pointerup", endDrag);
+    stage.addEventListener("pointercancel", endDrag);
+    stage.addEventListener("dblclick", () => {
+      lightboxScale = 1;
+      lightboxTx = 0;
+      lightboxTy = 0;
+      applyLightboxTransform();
+    });
+
+    window.addEventListener("keydown", (e) => {
+      if (e.key === "Escape" && lightboxOverlay && !lightboxOverlay.hidden) {
+        lightboxOverlay.hidden = true;
+      }
+    });
+
+    return lightboxOverlay;
+  }
+
+  function openInLightbox(contentNodeClone, titleText) {
+    ensureLightboxModal();
+    lightboxCanvas.innerHTML = "";
+    lightboxCanvas.appendChild(contentNodeClone);
+    if (lightboxTitleEl) {
+      lightboxTitleEl.textContent = titleText || "Preview";
+    }
+    lightboxScale = 1;
+    lightboxTx = 0;
+    lightboxTy = 0;
+    applyLightboxTransform();
+    lightboxOverlay.hidden = false;
+  }
+
+  function extractSvgMarkupFromContainer(container) {
+    const svgEl = container.querySelector("svg");
+    if (svgEl) {
+      return new XMLSerializer().serializeToString(svgEl);
+    }
+    const imgEl = container.querySelector("img.agy-mermaid-img");
+    if (imgEl && imgEl.src && imgEl.src.startsWith("data:image/svg+xml")) {
+      const commaIdx = imgEl.src.indexOf(",");
+      if (commaIdx > 0) {
+        try {
+          return decodeURIComponent(imgEl.src.slice(commaIdx + 1));
+        } catch (_) {}
+      }
+    }
+    return "";
+  }
+
+  function attachMermaidToolbars(root) {
+    root.querySelectorAll(".agy-mermaid-container").forEach((container) => {
+      if (container.querySelector(".agy-mermaid-toolbar")) return;
+      const toolbar = document.createElement("div");
+      toolbar.className = "agy-mermaid-toolbar";
+      let zoom = 1;
+
+      const applyInlineZoom = () => {
+        const target = container.querySelector(".mermaid");
+        if (!target) return;
+        target.style.transformOrigin = "top left";
+        target.style.zoom = String(zoom);
+        btnReset.textContent = `${Math.round(zoom * 100)}%`;
+      };
+
+      const btnOut = document.createElement("button");
+      btnOut.type = "button";
+      btnOut.className = "agy-mermaid-btn";
+      btnOut.textContent = "−";
+      btnOut.title = "Zoom out diagram";
+      btnOut.addEventListener("click", (e) => {
+        e.stopPropagation();
+        zoom = Math.max(0.4, Math.round((zoom - 0.15) * 100) / 100);
+        applyInlineZoom();
+      });
+
+      const btnReset = document.createElement("button");
+      btnReset.type = "button";
+      btnReset.className = "agy-mermaid-btn";
+      btnReset.textContent = "100%";
+      btnReset.title = "Reset diagram zoom";
+      btnReset.addEventListener("click", (e) => {
+        e.stopPropagation();
+        zoom = 1;
+        applyInlineZoom();
+      });
+
+      const btnIn = document.createElement("button");
+      btnIn.type = "button";
+      btnIn.className = "agy-mermaid-btn";
+      btnIn.textContent = "+";
+      btnIn.title = "Zoom in diagram";
+      btnIn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        zoom = Math.min(3, Math.round((zoom + 0.15) * 100) / 100);
+        applyInlineZoom();
+      });
+
+      const btnSvg = document.createElement("button");
+      btnSvg.type = "button";
+      btnSvg.className = "agy-mermaid-btn";
+      btnSvg.textContent = "Copy SVG";
+      btnSvg.title = "Copy raw SVG markup to clipboard";
+      btnSvg.addEventListener("click", (e) => {
+        e.stopPropagation();
+        const svgMarkup = extractSvgMarkupFromContainer(container);
+        if (!svgMarkup) return;
+        copyToClipboard(svgMarkup).then(() => {
+          btnSvg.textContent = "✓ SVG";
+          btnSvg.classList.add("copied");
+          setTimeout(() => {
+            btnSvg.textContent = "Copy SVG";
+            btnSvg.classList.remove("copied");
+          }, 1400);
+        });
+      });
+
+      const btnExpand = document.createElement("button");
+      btnExpand.type = "button";
+      btnExpand.className = "agy-mermaid-btn";
+      btnExpand.textContent = "⛶ Expand";
+      btnExpand.title = "Open diagram in fullscreen interactive pan/zoom viewer";
+      btnExpand.addEventListener("click", (e) => {
+        e.stopPropagation();
+        const mediaEl = container.querySelector("img.agy-mermaid-img, svg");
+        if (!mediaEl) return;
+        openInLightbox(mediaEl.cloneNode(true), "Mermaid Diagram — Interactive Pan & Zoom");
+      });
+
+      toolbar.appendChild(btnOut);
+      toolbar.appendChild(btnReset);
+      toolbar.appendChild(btnIn);
+      toolbar.appendChild(btnSvg);
+      toolbar.appendChild(btnExpand);
+      container.appendChild(toolbar);
+    });
+
+    root
+      .querySelectorAll("img:not(.agy-file-icon):not([data-agy-lb='1'])")
+      .forEach((img) => {
+        img.setAttribute("data-agy-lb", "1");
+        if (img.closest("a")) return;
+        img.addEventListener("click", (e) => {
+          e.stopPropagation();
+          const clone = document.createElement("img");
+          clone.src = img.currentSrc || img.src;
+          clone.alt = img.alt || "Image Preview";
+          openInLightbox(clone, img.alt || "Image Preview");
+        });
+      });
+  }
+
+  let tocPanelEl = null;
+  let tocHeadingEntries = [];
+  let tocScrollTicking = false;
+
+  function updateActiveTocHeading() {
+    if (!tocPanelEl || tocPanelEl.hidden || !tocHeadingEntries.length) return;
+    const threshold = window.scrollY + 96;
+    let activeIdx = 0;
+    for (let i = 0; i < tocHeadingEntries.length; i++) {
+      const top =
+        tocHeadingEntries[i].el.getBoundingClientRect().top + window.scrollY;
+      if (top <= threshold) {
+        activeIdx = i;
+      } else {
+        break;
+      }
+    }
+    tocHeadingEntries.forEach((entry, idx) => {
+      entry.btn.classList.toggle("active", idx === activeIdx);
+    });
+  }
+
+  function refreshTableOfContents(root) {
+    if (!document.body || !document.body.classList.contains("agy-review-body")) {
+      return;
+    }
+    if (!tocPanelEl) {
+      tocPanelEl = document.createElement("aside");
+      tocPanelEl.id = "agy-toc-panel";
+      tocPanelEl.className = "agy-toc-panel";
+      tocPanelEl.hidden = true;
+      tocPanelEl.innerHTML = `
+        <div class="agy-toc-header">
+          <span id="agy-toc-title">Outline</span>
+          <button type="button" class="agy-toc-close" id="agy-toc-close" title="Close Outline">✕</button>
+        </div>
+        <div class="agy-toc-list" id="agy-toc-list"></div>
+      `;
+      document.body.appendChild(tocPanelEl);
+
+      tocPanelEl.querySelector("#agy-toc-close").addEventListener("click", () => {
+        toggleTocPanel(false);
+      });
+
+      window.addEventListener(
+        "scroll",
+        () => {
+          if (!tocScrollTicking && tocPanelEl && !tocPanelEl.hidden) {
+            tocScrollTicking = true;
+            requestAnimationFrame(() => {
+              tocScrollTicking = false;
+              updateActiveTocHeading();
+            });
+          }
+        },
+        { passive: true }
+      );
+    }
+
+    const contentRoot = document.getElementById("agy-content") || root;
+    const rawHeadings = Array.from(
+      contentRoot.querySelectorAll("h1, h2, h3, h4")
+    ).filter(
+      (h) =>
+        !h.closest(".markdown-alert, .agy-carousel-slide:not(.active), .agy-toc-panel") &&
+        (h.textContent || "").trim().length > 0
+    );
+
+    const listEl = tocPanelEl.querySelector("#agy-toc-list");
+    const titleEl = tocPanelEl.querySelector("#agy-toc-title");
+    listEl.innerHTML = "";
+    tocHeadingEntries = [];
+
+    if (titleEl) {
+      titleEl.textContent = `Outline (${rawHeadings.length})`;
+    }
+
+    rawHeadings.forEach((h) => {
+      const level = h.tagName.toLowerCase();
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = `agy-toc-item agy-toc-${level}`;
+      btn.textContent = (h.textContent || "").trim();
+      btn.title = btn.textContent;
+      btn.addEventListener("click", () => {
+        const dl = h.getAttribute("data-line");
+        if (dl !== null && !Number.isNaN(parseInt(dl, 10))) {
+          window.dispatchEvent(
+            new CustomEvent("agy.markdown.jumpToLine", {
+              detail: { line: parseInt(dl, 10), element: h }
+            })
+          );
+        } else {
+          h.scrollIntoView({ behavior: "smooth", block: "start" });
+        }
+        setTimeout(updateActiveTocHeading, 120);
+      });
+      listEl.appendChild(btn);
+      tocHeadingEntries.push({ el: h, btn });
+    });
+
+    const btnToc = document.getElementById("btn-toc");
+    if (btnToc && !btnToc.getAttribute("data-agy-toc-bound")) {
+      btnToc.setAttribute("data-agy-toc-bound", "1");
+      btnToc.addEventListener("click", (e) => {
+        e.stopPropagation();
+        toggleTocPanel();
+      });
+    }
+    updateActiveTocHeading();
+  }
+
+  function toggleTocPanel(forceState) {
+    if (!tocPanelEl) return;
+    const nextOpen =
+      typeof forceState === "boolean" ? forceState : tocPanelEl.hidden;
+    tocPanelEl.hidden = !nextOpen;
+    const btnToc = document.getElementById("btn-toc");
+    if (btnToc) {
+      btnToc.classList.toggle("agy-btn-active", nextOpen);
+      btnToc.setAttribute("aria-pressed", nextOpen ? "true" : "false");
+    }
+    if (nextOpen) {
+      updateActiveTocHeading();
+    }
+  }
+
+  let citePillEl = null;
+  let citeSelectionState = null;
+
+  function resolveLineRangeForSelection(range) {
+    const findLineEl = (node) => {
+      const el = node && node.nodeType === 1 ? node : node && node.parentElement;
+      return el && el.closest ? el.closest("[data-line]") : null;
+    };
+    const startEl = findLineEl(range.startContainer);
+    const endEl = findLineEl(range.endContainer) || startEl;
+    if (!startEl) return null;
+    const s0 = parseInt(startEl.getAttribute("data-line"), 10);
+    if (Number.isNaN(s0)) return null;
+    const e0Attr =
+      (endEl && endEl.getAttribute("data-line-end")) ||
+      (endEl && endEl.getAttribute("data-line")) ||
+      startEl.getAttribute("data-line-end");
+    let e0 = e0Attr !== null ? parseInt(e0Attr, 10) : s0;
+    if (Number.isNaN(e0) || e0 < s0) e0 = s0;
+    const startLine1 = s0 + 1;
+    const endLine1 = Math.max(startLine1, e0);
+    return { startLine: startLine1, endLine: endLine1 };
+  }
+
+  function initSelectionCitationPill() {
+    if (citePillEl || !document.body || !document.body.classList.contains("agy-review-body")) {
+      return;
+    }
+    citePillEl = document.createElement("div");
+    citePillEl.id = "agy-cite-pill";
+    citePillEl.className = "agy-cite-pill";
+    citePillEl.hidden = true;
+    citePillEl.innerHTML = `
+      <button type="button" class="agy-cite-btn" id="agy-cite-link">📎 Cite</button>
+      <button type="button" class="agy-cite-btn" id="agy-cite-quote">❝ Cite + Quote</button>
+    `;
+    document.body.appendChild(citePillEl);
+
+    const btnLink = citePillEl.querySelector("#agy-cite-link");
+    const btnQuote = citePillEl.querySelector("#agy-cite-quote");
+
+    btnLink.addEventListener("mousedown", (e) => e.preventDefault());
+    btnQuote.addEventListener("mousedown", (e) => e.preventDefault());
+
+    btnLink.addEventListener("click", (e) => {
+      e.stopPropagation();
+      if (!citeSelectionState) return;
+      copyToClipboard(citeSelectionState.linkMarkdown).then(() => {
+        btnLink.textContent = "✓ Copied Citation!";
+        setTimeout(() => {
+          if (citePillEl) citePillEl.hidden = true;
+        }, 700);
+      });
+    });
+
+    btnQuote.addEventListener("click", (e) => {
+      e.stopPropagation();
+      if (!citeSelectionState) return;
+      copyToClipboard(citeSelectionState.quoteMarkdown).then(() => {
+        btnQuote.textContent = "✓ Copied with Quote!";
+        setTimeout(() => {
+          if (citePillEl) citePillEl.hidden = true;
+        }, 700);
+      });
+    });
+
+    document.addEventListener("selectionchange", () => {
+      const sel = window.getSelection();
+      if (!sel || sel.isCollapsed || !sel.rangeCount) {
+        if (citePillEl) citePillEl.hidden = true;
+        return;
+      }
+      const text = sel.toString().trim();
+      if (text.length < 3) {
+        if (citePillEl) citePillEl.hidden = true;
+        return;
+      }
+      const range = sel.getRangeAt(0);
+      const container = document.getElementById("agy-content");
+      if (
+        !container ||
+        !container.contains(range.commonAncestorContainer)
+      ) {
+        if (citePillEl) citePillEl.hidden = true;
+        return;
+      }
+      const lineRange = resolveLineRangeForSelection(range);
+      if (!lineRange) {
+        if (citePillEl) citePillEl.hidden = true;
+        return;
+      }
+      const realPath =
+        document.body.getAttribute("data-real-path") ||
+        (document.querySelector(".agy-filepath") &&
+          document.querySelector(".agy-filepath").getAttribute("title")) ||
+        "";
+      if (!realPath) return;
+      const cleanPath = realPath.includes("→")
+        ? realPath.split("→").pop().trim()
+        : realPath.trim();
+      const baseName = cleanPath.split(/[\\/]/).pop() || "document.md";
+      const lineFrag =
+        lineRange.startLine === lineRange.endLine
+          ? `L${lineRange.startLine}`
+          : `L${lineRange.startLine}-L${lineRange.endLine}`;
+      const normalizedFileUrl =
+        "file://" + (cleanPath.startsWith("/") ? "" : "/") + cleanPath.replace(/\\/g, "/");
+      const linkMarkdown = `[${baseName}#${lineFrag}](${normalizedFileUrl}#${lineFrag})`;
+      const quotedLines = text
+        .split(/\r?\n/)
+        .map((l) => `> ${l}`)
+        .join("\n");
+      const quoteMarkdown = `${linkMarkdown}\n${quotedLines}`;
+
+      citeSelectionState = { linkMarkdown, quoteMarkdown };
+      btnLink.textContent = `📎 Cite #${lineFrag}`;
+      btnQuote.textContent = `❝ Cite + Quote`;
+
+      const rect = range.getBoundingClientRect();
+      if (rect.width === 0 && rect.height === 0) return;
+      citePillEl.hidden = false;
+      const top = Math.max(48, rect.top - 38);
+      const left = Math.min(
+        window.innerWidth - 260,
+        Math.max(12, rect.left + rect.width / 2 - 110)
+      );
+      citePillEl.style.top = `${Math.round(top)}px`;
+      citePillEl.style.left = `${Math.round(left)}px`;
+    });
+  }
+
   let isEnhancing = false;
   function enhanceAll() {
     const root = document.body;
@@ -1785,10 +2453,14 @@
       fixBrokenImages(root);
       transformAlerts(root);
       transformTables(root);
+      transformTaskLists(root);
       transformMermaidBlocks(root);
+      attachMermaidToolbars(root);
       transformCodeBlocks(root);
       bindInteractiveCarousels(root);
       decorateLinks(root);
+      refreshTableOfContents(root);
+      initSelectionCitationPill();
       window.dispatchEvent(new CustomEvent("agy.markdown.layoutChanged"));
     } finally {
       isEnhancing = false;
@@ -1835,7 +2507,7 @@
       if (
         targetEl &&
         targetEl.closest(
-          ".mermaid, .agy-uuid-copy-btn, .agy-copy-btn, .agy-carousel-counter"
+          ".mermaid, .agy-uuid-copy-btn, .agy-copy-btn, .agy-carousel-counter, .agy-toc-panel, .agy-table-actions, .agy-mermaid-toolbar, .agy-lightbox-overlay, .agy-cite-pill"
         )
       ) {
         return false;

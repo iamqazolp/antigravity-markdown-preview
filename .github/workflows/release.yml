@@ -1,0 +1,58 @@
+name: Release & Publish Extension
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Package VSIX, GitHub Release & Marketplace Publish
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Verify syntax
+        run: |
+          node --check extension.js
+          node --check media/antigravity-markdown.js
+
+      - name: Package .vsix
+        run: npm run package
+
+      - name: Create GitHub Release with .vsix asset
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: "*.vsix"
+          generate_release_notes: true
+
+      - name: Publish to VS Code Marketplace (if VSCE_PAT secret is set)
+        env:
+          VSCE_PAT: ${{ secrets.VSCE_PAT }}
+        run: |
+          if [ -n "$VSCE_PAT" ]; then
+            npx --yes @vscode/vsce publish --packagePath *.vsix -p "$VSCE_PAT"
+          else
+            echo "Skipping VS Code Marketplace publish (VSCE_PAT secret not configured)."
+          fi
+
+      - name: Publish to Open VSX Registry (if OVSX_PAT secret is set)
+        env:
+          OVSX_PAT: ${{ secrets.OVSX_PAT }}
+        run: |
+          if [ -n "$OVSX_PAT" ]; then
+            npx --yes ovsx publish *.vsix -p "$OVSX_PAT"
+          else
+            echo "Skipping Open VSX publish (OVSX_PAT secret not configured)."
+          fi

@@ -2,6 +2,24 @@
 
 All notable changes to the **Antigravity Markdown Review** (`agy-markdown-review`) extension will be documented in this file.
 
+## [1.2.0] - 2026-11-05
+
+### Added
+- **Floating Document Outline / Table of Contents (`#btn-toc`)**:
+  - Toggleable **Outline** drawer in the top review toolbar that tracks `h1`–`h4` headings in real time as you scroll and jumps smoothly on click (syncing with the raw editor when Split Edit is open).
+- **Interactive Mermaid Pan / Zoom / Lightbox, Image Lightbox & SVG Copy**:
+  - Added hover toolbar (`−`, `100%`, `+`, `Copy SVG`, `⛶ Expand`) to every Mermaid diagram.
+  - Clicking `⛶ Expand` on a Mermaid diagram or clicking any standalone image opens a fullscreen interactive pan/zoom Lightbox (`Scroll` to zoom up to 800%, `Drag` to pan, `Double-click` to reset, `Esc` to close).
+- **Interactive Task Checkboxes (`- [ ]` ↔ `- [x]`)**:
+  - Clicking any task checkbox in the rendered Review canvas immediately toggles `- [ ]` / `- [x]` on the corresponding line in the underlying `.md` document via `vscode.WorkspaceEdit` (preserving Undo history).
+- **1-Click Table Copy (`Copy MD` / `Copy CSV`) & Selection "Cite to Agent" Pill**:
+  - Hover any rendered table to copy it as GitHub Flavored Markdown (`Copy MD`) or RFC-4180 CSV (`Copy CSV`).
+  - Select any text in the preview to display a floating **`📎 Cite #Lstart-Lend`** / **`❝ Cite + Quote`** pill that copies a `[file.md#L12-L24](file:///abs/path/file.md#L12-L24)` citation (with optional blockquote) straight to the clipboard.
+- **Standalone Interactive HTML Export (`agyMarkdown.exportHtml`, `agyMarkdown.exportHtmlThemed`, `agyMarkdown.exportHtmlUnthemed`)**:
+  - Export a single, 100% self-contained `.html` file (Themed or Unthemed) with embedded base64 local images, inlined KaTeX/Mermaid/Antigravity runtimes, working interactive carousels, Mermaid zoom lightbox, and Outline drawer.
+- **Automated Release & Open VSX Workflow (`.github/workflows/release.yml`)**:
+  - Pushing a `v*.*.*` tag automatically verifies syntax, packages the `.vsix`, publishes a GitHub Release with the `.vsix` attached, and publishes to VS Code Marketplace (`VSCE_PAT`) and Open VSX (`OVSX_PAT`).
+
 ## [1.1.1] - 2026-11-05
 
 ### Added

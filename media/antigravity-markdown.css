@@ -1380,3 +1380,434 @@ body.agy-review-body details > summary,
   color: var(--agy-heading);
   font-weight: 500;
 }
+
+/* --------------------------------------------------------------------------
+   v1.2.0 Interactive Enhancements:
+   1. Floating Outline / Table of Contents (.agy-toc-panel)
+   2. Interactive Task Checkboxes (.agy-task-checkbox)
+   3. Table Copy Toolbar (.agy-table-actions)
+   4. Mermaid Zoom/Export Toolbar (.agy-mermaid-toolbar) & Lightbox (#agy-lightbox)
+   5. Selection "Cite to Agent" Floating Pill (#agy-cite-pill)
+   -------------------------------------------------------------------------- */
+.agy-menu-divider {
+  height: 1px;
+  margin: 4px 6px;
+  background: var(--agy-table-border);
+  pointer-events: none;
+}
+
+/* 1. Floating Table of Contents (Outline Drawer) */
+.agy-toc-panel {
+  position: fixed;
+  top: 46px;
+  right: 16px;
+  width: 264px;
+  max-width: calc(100vw - 32px);
+  max-height: calc(100vh - 64px);
+  display: flex;
+  flex-direction: column;
+  background-color: var(--vscode-editorWidget-background, var(--agy-surface));
+  color: var(--agy-fg);
+  border: 1px solid var(--vscode-widget-border, var(--agy-border));
+  border-radius: 10px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.28), 0 2px 8px rgba(0, 0, 0, 0.14);
+  z-index: 95;
+  overflow: hidden;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  transition: opacity 0.14s ease, transform 0.14s ease;
+}
+
+.agy-toc-panel[hidden] {
+  display: none !important;
+}
+
+.agy-toc-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  background: var(--agy-code-header-bg);
+  border-bottom: 1px solid var(--agy-table-border);
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--agy-muted-fg);
+}
+
+.agy-toc-close {
+  appearance: none;
+  border: none;
+  background: transparent;
+  color: var(--agy-muted-fg);
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 13px;
+  line-height: 1;
+}
+
+.agy-toc-close:hover {
+  color: var(--agy-fg);
+  background: rgba(128, 128, 128, 0.16);
+}
+
+.agy-toc-list {
+  overflow-y: auto;
+  padding: 6px;
+  margin: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.agy-toc-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  appearance: none;
+  border: none;
+  border-left: 2px solid transparent;
+  background: transparent;
+  color: var(--agy-muted-fg);
+  font-family: var(--agy-font-sans);
+  font-size: 12px;
+  line-height: 1.35;
+  padding: 5px 8px;
+  border-radius: 0 5px 5px 0;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: background-color 0.1s ease, color 0.1s ease, border-color 0.1s ease;
+}
+
+.agy-toc-item:hover {
+  color: var(--agy-fg);
+  background: rgba(128, 128, 128, 0.11);
+}
+
+.agy-toc-item.active {
+  color: var(--agy-heading);
+  font-weight: 600;
+  border-left-color: var(--agy-link);
+  background: rgba(59, 130, 246, 0.11);
+}
+
+.agy-toc-item.agy-toc-h1 {
+  padding-left: 8px;
+  font-weight: 600;
+}
+.agy-toc-item.agy-toc-h2 {
+  padding-left: 14px;
+}
+.agy-toc-item.agy-toc-h3 {
+  padding-left: 24px;
+  font-size: 11.5px;
+}
+.agy-toc-item.agy-toc-h4 {
+  padding-left: 34px;
+  font-size: 11px;
+}
+
+/* 2. Interactive Task Checkboxes (- [ ] / - [x]) */
+ul.agy-task-list,
+ol.agy-task-list {
+  list-style: none !important;
+  padding-left: 0.4rem !important;
+}
+
+li.agy-task-list-item {
+  list-style: none !important;
+}
+
+input[type="checkbox"].agy-task-checkbox {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 15px;
+  height: 15px;
+  margin: 0 7px 0 0;
+  vertical-align: -2.5px;
+  border: 1.5px solid var(--agy-muted);
+  border-radius: 4px;
+  background-color: var(--agy-code-bg);
+  cursor: pointer;
+  position: relative;
+  display: inline-block;
+  transition: background-color 0.12s ease, border-color 0.12s ease, transform 0.08s ease;
+}
+
+input[type="checkbox"].agy-task-checkbox:hover {
+  border-color: var(--agy-link);
+  transform: scale(1.05);
+}
+
+input[type="checkbox"].agy-task-checkbox:checked {
+  background-color: var(--agy-alert-tip, #22c55e);
+  border-color: var(--agy-alert-tip, #22c55e);
+}
+
+input[type="checkbox"].agy-task-checkbox:checked::after {
+  content: "";
+  position: absolute;
+  left: 4px;
+  top: 1px;
+  width: 4px;
+  height: 8px;
+  border: solid #ffffff;
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
+
+li.agy-task-list-item.agy-task-checked {
+  color: var(--agy-muted-fg);
+}
+
+/* 3. Table Hover Action Bar (Copy MD / Copy CSV) */
+.agy-table-wrapper {
+  position: relative;
+}
+
+.agy-table-actions {
+  position: absolute;
+  top: 6px;
+  right: 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.14s ease;
+  z-index: 5;
+  background: var(--vscode-editorWidget-background, var(--agy-surface));
+  padding: 2px 4px;
+  border-radius: 6px;
+  border: 1px solid var(--agy-table-border);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.18);
+}
+
+.agy-table-wrapper:hover .agy-table-actions {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.agy-table-btn {
+  appearance: none;
+  border: none;
+  background: transparent;
+  color: var(--agy-muted-fg);
+  font-family: var(--agy-font-sans);
+  font-size: 10.5px;
+  font-weight: 500;
+  padding: 2px 6px;
+  border-radius: 4px;
+  cursor: pointer;
+  line-height: 1.3;
+  transition: background-color 0.12s ease, color 0.12s ease;
+}
+
+.agy-table-btn:hover {
+  color: var(--agy-fg);
+  background: rgba(128, 128, 128, 0.16);
+}
+
+.agy-table-btn.copied {
+  color: var(--agy-alert-tip, #22c55e);
+}
+
+/* 4. Mermaid Interactive Zoom / Export Toolbar & Lightbox */
+.agy-mermaid-container {
+  position: relative;
+}
+
+.agy-mermaid-toolbar {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.14s ease;
+  z-index: 6;
+  background: var(--vscode-editorWidget-background, var(--agy-surface));
+  padding: 3px 5px;
+  border-radius: 7px;
+  border: 1px solid var(--agy-table-border);
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.22);
+}
+
+.agy-mermaid-container:hover .agy-mermaid-toolbar {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.agy-mermaid-btn {
+  appearance: none;
+  border: none;
+  background: transparent;
+  color: var(--agy-muted-fg);
+  font-family: var(--agy-font-sans);
+  font-size: 11px;
+  font-weight: 500;
+  padding: 2px 6px;
+  border-radius: 4px;
+  cursor: pointer;
+  line-height: 1.3;
+}
+
+.agy-mermaid-btn:hover {
+  color: var(--agy-fg);
+  background: rgba(128, 128, 128, 0.16);
+}
+
+.agy-mermaid-btn.copied {
+  color: var(--agy-alert-tip, #22c55e);
+}
+
+body.agy-review-body .agy-review-container img:not(.agy-file-icon) {
+  cursor: zoom-in;
+}
+
+.agy-lightbox-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(9, 11, 16, 0.84);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  z-index: 200;
+  display: flex;
+  flex-direction: column;
+  user-select: none;
+}
+
+.agy-lightbox-overlay[hidden] {
+  display: none !important;
+}
+
+.agy-lightbox-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 18px;
+  background: rgba(18, 20, 26, 0.88);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+  color: #f4f4f5;
+  font-size: 12.5px;
+}
+
+.agy-lightbox-controls {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.agy-lightbox-btn {
+  appearance: none;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: rgba(255, 255, 255, 0.08);
+  color: #f4f4f5;
+  font-family: var(--agy-font-sans);
+  font-size: 12px;
+  padding: 4px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.agy-lightbox-btn:hover {
+  background: rgba(255, 255, 255, 0.18);
+}
+
+.agy-lightbox-stage {
+  flex: 1;
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: grab;
+}
+
+.agy-lightbox-stage.dragging {
+  cursor: grabbing;
+}
+
+.agy-lightbox-canvas {
+  transform-origin: center center;
+  transition: transform 0.05s linear;
+  max-width: 92vw;
+  max-height: 84vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.agy-lightbox-canvas img,
+.agy-lightbox-canvas svg {
+  max-width: 90vw;
+  max-height: 82vh;
+  width: auto;
+  height: auto;
+  border-radius: 8px;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.45);
+  pointer-events: none;
+}
+
+.agy-lightbox-hint {
+  text-align: center;
+  padding: 6px 12px;
+  font-size: 11px;
+  color: rgba(244, 244, 245, 0.65);
+  background: rgba(18, 20, 26, 0.75);
+}
+
+/* 5. Selection "Cite to Agent" Floating Pill */
+.agy-cite-pill {
+  position: fixed;
+  z-index: 150;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 6px;
+  border-radius: 8px;
+  background: var(--vscode-editorWidget-background, var(--agy-surface));
+  border: 1px solid var(--vscode-widget-border, var(--agy-border));
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+  font-family: var(--agy-font-sans);
+}
+
+.agy-cite-pill[hidden] {
+  display: none !important;
+}
+
+.agy-cite-btn {
+  appearance: none;
+  border: none;
+  background: transparent;
+  color: var(--agy-fg);
+  font-family: var(--agy-font-sans);
+  font-size: 11.5px;
+  font-weight: 500;
+  padding: 3px 8px;
+  border-radius: 5px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.agy-cite-btn:hover {
+  background: rgba(59, 130, 246, 0.16);
+  color: var(--agy-link);
+}
+
+@media print {
+  .agy-toc-panel,
+  .agy-table-actions,
+  .agy-mermaid-toolbar,
+  .agy-lightbox-overlay,
+  .agy-cite-pill {
+    display: none !important;
+  }
+}

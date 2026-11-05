@@ -2,7 +2,7 @@
   "name": "agy-markdown-review",
   "displayName": "Antigravity Markdown Review",
   "description": "Applies Google Antigravity's Artifact Viewer style (callouts, tables, code blocks, carousels, and file links) to every Markdown review and preview in VS Code.",
-  "version": "1.1.1",
+  "version": "1.2.0",
   "publisher": "iamqazolp",
   "license": "MIT",
   "icon": "media/icon.png",
@@ -41,7 +41,8 @@
   ],
   "scripts": {
     "package": "npx --yes @vscode/vsce package --baseImagesUrl https://raw.githubusercontent.com/iamqazolp/antigravity-markdown-preview/main --baseContentUrl https://github.com/iamqazolp/antigravity-markdown-preview/blob/main",
-    "publish": "npx --yes @vscode/vsce publish --baseImagesUrl https://raw.githubusercontent.com/iamqazolp/antigravity-markdown-preview/main --baseContentUrl https://github.com/iamqazolp/antigravity-markdown-preview/blob/main"
+    "publish": "npx --yes @vscode/vsce publish --baseImagesUrl https://raw.githubusercontent.com/iamqazolp/antigravity-markdown-preview/main --baseContentUrl https://github.com/iamqazolp/antigravity-markdown-preview/blob/main",
+    "publish:ovsx": "npx --yes ovsx publish"
   },
   "activationEvents": [
     "onStartupFinished",
@@ -116,6 +117,19 @@
       {
         "command": "agyMarkdown.exportPdfUnthemed",
         "title": "Antigravity: Export Markdown to PDF (Unthemed)"
+      },
+      {
+        "command": "agyMarkdown.exportHtml",
+        "title": "Antigravity: Export Markdown to Standalone HTML…",
+        "icon": "$(globe)"
+      },
+      {
+        "command": "agyMarkdown.exportHtmlThemed",
+        "title": "Antigravity: Export Markdown to Standalone HTML (Themed)"
+      },
+      {
+        "command": "agyMarkdown.exportHtmlUnthemed",
+        "title": "Antigravity: Export Markdown to Standalone HTML (Unthemed)"
       },
       {
         "command": "agyMarkdown.openGitHub",
